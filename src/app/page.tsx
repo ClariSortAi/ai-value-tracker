@@ -1,65 +1,141 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState, useCallback } from "react";
+import { Search } from "lucide-react";
+import { RoleTabs } from "@/components/role-tabs";
+import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
+
+interface Product {
+  id: string;
+  name: string;
+  slug: string;
+  tagline: string | null;
+  logo: string | null;
+  category: string | null;
+  tags: string[];
+  targetRoles: string[];
+  launchDate: string;
+  scores: { compositeScore: number }[];
+}
+
+export default function DiscoverPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [activeRole, setActiveRole] = useState("all");
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        sortBy: "date",
+        limit: "50",
+      });
+      
+      if (searchQuery) params.set("search", searchQuery);
+      if (role && role !== "all") params.set("role", role);
+
+      const res = await fetch(`/api/products?${params}`);
+      const data = await res.json();
+      setProducts(data.products || []);
+    } catch (error) {
+      console.error("Failed to fetch products:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchProducts("", "all");
+  }, [fetchProducts]);
+
+  // Handle search with debounce
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    
+    if (searchTimeout) clearTimeout(searchTimeout);
+    
+    const timeout = setTimeout(() => {
+      fetchProducts(value, activeRole);
+    }, 300);
+    
+    setSearchTimeout(timeout);
+  };
+
+  // Handle role change
+  const handleRoleChange = (role: string) => {
+    setActiveRole(role);
+    fetchProducts(search, role);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-[var(--background)]">
+      {/* Hero Section */}
+      <section className="pt-20 pb-10 md:pt-28 md:pb-14">
+        <div className="container-wide text-center">
+          <h1 className="mb-4">
+            Discover AI Tools
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-lg md:text-xl text-[var(--foreground-muted)] max-w-xl mx-auto mb-10">
+            Find the best AI products to power your work
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+          
+          {/* Search Bar */}
+          <div className="max-w-xl mx-auto relative">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)] pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search tools..."
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full pl-14 pr-6 py-4 text-base"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          </div>
         </div>
-      </main>
+      </section>
+
+      {/* Role Tabs */}
+      <RoleTabs activeRole={activeRole} onRoleChange={handleRoleChange} />
+
+      {/* Tools Grid */}
+      <section className="py-10">
+        <div className="container-wide">
+          {/* Results count */}
+          {!loading && (
+            <p className="text-sm text-[var(--foreground-subtle)] mb-6">
+              {products.length} {products.length === 1 ? "tool" : "tools"}
+              {activeRole !== "all" && ` for ${activeRole}`}
+              {search && ` matching "${search}"`}
+            </p>
+          )}
+
+          {/* Responsive Grid */}
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {Array.from({ length: 9 }).map((_, i) => (
+                <ToolCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-20">
+              <p className="text-[var(--foreground-muted)] text-lg mb-2">
+                No tools found
+              </p>
+              <p className="text-[var(--foreground-subtle)]">
+                Try adjusting your search or filter
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {products.map((product) => (
+                <ToolCard key={product.id} product={product} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
