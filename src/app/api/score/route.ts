@@ -4,9 +4,12 @@ import { scoreProduct, type ProductData } from "@/lib/ai";
 
 // Score products that don't have scores yet
 export async function GET(request: NextRequest) {
-  // Verify cron secret in production
+  // Vercel Cron sends x-vercel-cron header, manual triggers need CRON_SECRET
+  const isVercelCron = request.headers.get("x-vercel-cron") === "1";
   const authHeader = request.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const isAuthorized = isVercelCron || (process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`);
+  
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
