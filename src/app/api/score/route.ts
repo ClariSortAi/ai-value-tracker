@@ -8,20 +8,31 @@ export const runtime = 'nodejs';
 
 // Score products that don't have scores yet
 export async function GET(request: NextRequest) {
-  // Check if this is a Vercel Cron request
+  // Check if this is a Vercel Cron request (scheduled runs send this header)
   const isVercelCron = request.headers.get("x-vercel-cron") === "1";
   
-  // Check for manual trigger with CRON_SECRET
+  // Check for manual trigger with CRON_SECRET in Authorization header
   const authHeader = request.headers.get("authorization");
   const hasValidSecret = process.env.CRON_SECRET 
     ? authHeader === `Bearer ${process.env.CRON_SECRET}`
     : false;
   
+  // Check if request is from Vercel's internal network (for manual triggers from dashboard)
+  // Manual "Run Now" triggers may not send x-vercel-cron header, but come from Vercel
+  const userAgent = request.headers.get("user-agent") || "";
+  const vercelId = request.headers.get("x-vercel-id");
+  const vercelDeploymentUrl = request.headers.get("x-vercel-deployment-url");
+  const isVercelInternal = vercelId !== null || vercelDeploymentUrl !== null || userAgent.includes("vercel");
+  
   // Allow in development without auth (for testing)
   const isDevelopment = process.env.NODE_ENV !== "production";
   
-  // Authorize if: Vercel Cron OR valid secret OR development mode
-  const isAuthorized = isVercelCron || hasValidSecret || isDevelopment;
+  // SIMPLIFIED: If CRON_SECRET is set, allow Vercel internal requests (manual triggers)
+  // This handles the case where "Run Now" doesn't send x-vercel-cron header
+  const allowVercelManual = process.env.CRON_SECRET && isVercelInternal;
+  
+  // Authorize if: Vercel Cron OR valid secret OR Vercel internal (when CRON_SECRET exists) OR development mode
+  const isAuthorized = isVercelCron || hasValidSecret || allowVercelManual || isDevelopment;
   
   // Log authentication attempt for debugging
   console.log("Score job auth check:", {
@@ -30,9 +41,13 @@ export async function GET(request: NextRequest) {
     hasAuthHeader: !!authHeader,
     hasCronSecret: !!process.env.CRON_SECRET,
     hasValidSecret,
+    isVercelInternal,
+    allowVercelManual,
     isDevelopment,
     isAuthorized,
     nodeEnv: process.env.NODE_ENV,
+    userAgent: userAgent.substring(0, 100), // Log first 100 chars
+    allHeaders: Object.fromEntries(request.headers.entries()),
   });
   
   if (!isAuthorized) {
