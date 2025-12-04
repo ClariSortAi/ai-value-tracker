@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { calculateCompositeScore, CATEGORIES, type CategoryKey } from "@/lib/utils";
+import { calculateCompositeScore, type CategoryKey } from "@/lib/utils";
 
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");

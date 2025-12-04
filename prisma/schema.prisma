@@ -20,45 +20,52 @@ model Product {
   logo        String?
   category    String?
   tags        String   @default("[]")
-  targetRoles String   @default("[]")  // JSON array: ["marketing", "sales", "engineering"]
+  targetRoles String   @default("[]") // JSON array: ["marketing", "sales", "engineering"]
   launchDate  DateTime @default(now())
   source      String   @default("MANUAL")
   sourceUrl   String?
-  sourceId    String?  @unique  // Unique constraint to prevent duplicates from same source
+  sourceId    String?  @unique // Unique constraint to prevent duplicates from same source
 
-  upvotes     Int      @default(0)
-  comments    Int      @default(0)
-  stars       Int      @default(0)
-  
-  scores      Score[]
+  upvotes  Int @default(0)
+  comments Int @default(0)
+  stars    Int @default(0)
+
+  // AI Gatekeeper viability assessment fields
+  viabilityScore Float?  @default(0) // AI confidence score (0-1)
+  targetAudience String? // 'b2b', 'b2c', 'developer', 'unknown'
+  productType    String? // 'saas', 'library', 'framework', 'game', 'tutorial', 'other'
+
+  scores Score[]
   // rawData removed to save storage (free tier: 0.5GB limit)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([source])
   @@index([launchDate])
   @@index([category])
+  @@index([targetAudience])
+  @@index([productType])
 }
 
 model Score {
-  id                  String   @id @default(cuid())
-  productId           String
-  product             Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  functionalCoverage  Int      @default(0)
-  usability           Int      @default(0)
-  innovation          Int      @default(0)
-  pricing             Int      @default(0)
-  integration         Int      @default(0)
-  security            Int      @default(0)
+  functionalCoverage Int @default(0)
+  usability          Int @default(0)
+  innovation         Int @default(0)
+  pricing            Int @default(0)
+  integration        Int @default(0)
+  security           Int @default(0)
 
-  compositeScore      Int      @default(0)
-  confidence          Float    @default(0)
-  reasoning           String?
-  version             Int      @default(1)
+  compositeScore Int     @default(0)
+  confidence     Float   @default(0)
+  reasoning      String?
+  version        Int     @default(1)
 
-  generatedAt         DateTime @default(now())
+  generatedAt DateTime @default(now())
 
   @@index([productId])
   @@index([compositeScore])

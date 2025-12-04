@@ -2,19 +2,43 @@ import { ScrapedProduct, ScraperResult } from "./types";
 
 const HN_ALGOLIA_API = "https://hn.algolia.com/api/v1";
 
-// AI-related search terms
+// Minimum upvotes required - ensures validated community interest
+const MIN_UPVOTES = 100;
+
+// AI-related search terms - focused on SaaS/startup launches
 const AI_SEARCH_TERMS = [
-  "Show HN AI",
+  "Show HN AI SaaS",
+  "Show HN AI startup",
+  "Show HN AI platform",
   "Show HN GPT",
   "Show HN LLM",
-  "Show HN machine learning",
-  "Show HN chatbot",
-  "Show HN generative",
   "AI startup",
-  "OpenAI",
-  "Claude AI",
-  "Anthropic",
+  "AI tool launch",
 ];
+
+// Blocklist patterns - reject posts matching these
+const BLOCKLIST_PATTERNS = [
+  /game/i,
+  /i coded/i,
+  /i built/i,
+  /i made/i,
+  /tutorial/i,
+  /experiment/i,
+  /toy/i,
+  /weekend project/i,
+  /side project/i,
+  /learning/i,
+  /homework/i,
+  /fun project/i,
+  /my first/i,
+  /just for fun/i,
+  /playing with/i,
+];
+
+// Check if post should be blocked based on title
+function shouldBlockPost(title: string): boolean {
+  return BLOCKLIST_PATTERNS.some(pattern => pattern.test(title));
+}
 
 interface HNItem {
   objectID: string;
@@ -53,8 +77,20 @@ export async function scrapeHackerNews(): Promise<ScraperResult> {
           if (seenIds.has(item.objectID)) continue;
           seenIds.add(item.objectID);
 
-          // Skip if no URL (self-posts without links)
-          if (!item.url && !item.story_text) continue;
+          // QUALITY FILTER: Require minimum upvotes (validated interest)
+          if ((item.points || 0) < MIN_UPVOTES) continue;
+
+          // QUALITY FILTER: Require external URL (real products have websites)
+          if (!item.url) {
+            console.log(`[HN] Skipped: ${item.title} (no external URL)`);
+            continue;
+          }
+
+          // QUALITY FILTER: Block games, tutorials, hobby projects
+          if (shouldBlockPost(item.title)) {
+            console.log(`[HN] Blocked: ${item.title} (matches blocklist)`);
+            continue;
+          }
 
           // Extract product name from title (usually "Show HN: Product Name - tagline")
           let name = item.title;
@@ -79,7 +115,7 @@ export async function scrapeHackerNews(): Promise<ScraperResult> {
             name: name.slice(0, 100),
             tagline: tagline || undefined,
             description: item.story_text?.slice(0, 500) || tagline || undefined,
-            website: item.url || `https://news.ycombinator.com/item?id=${item.objectID}`,
+            website: item.url, // Use actual external URL
             category: "AI Tools",
             tags: ["AI", "Show HN", "Startup"],
             launchDate: new Date(item.created_at),

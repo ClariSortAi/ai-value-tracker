@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
       ...results.theresAnAI.products,
     ];
 
-    // Save to database with quality filtering
-    const { created, updated, skipped, errors } = await saveScrapedProducts(allProducts);
+    // Save to database with quality filtering + AI gatekeeper
+    const { created, updated, skipped, rejected, errors } = await saveScrapedProducts(allProducts);
 
     const summary = {
       message: "Scrape completed",
@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
         created,
         updated,
         skipped, // Low-quality products filtered out
+        rejected, // Products rejected by AI gatekeeper (not commercial B2B SaaS)
         errors,
       },
     };

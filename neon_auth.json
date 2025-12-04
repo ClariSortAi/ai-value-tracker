@@ -1,0 +1,22 @@
+{
+  "id": "a58e00eb-e75e-4701-ad35-380ce0c04640",
+  "display_name": "Jason",
+  "has_password": false,
+  "is_anonymous": false,
+  "primary_email": "jason@graniteai.co",
+  "selected_team": null,
+  "auth_with_email": false,
+  "client_metadata": null,
+  "oauth_providers": [],
+  "server_metadata": null,
+  "otp_auth_enabled": false,
+  "selected_team_id": null,
+  "profile_image_url": null,
+  "requires_totp_mfa": false,
+  "signed_up_at_millis": 1764864922898,
+  "passkey_auth_enabled": false,
+  "last_active_at_millis": 1764864922898,
+  "primary_email_verified": false,
+  "client_read_only_metadata": null,
+  "primary_email_auth_enabled": true
+}

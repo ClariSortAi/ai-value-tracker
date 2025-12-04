@@ -1,19 +1,44 @@
 import { Octokit } from "@octokit/rest";
 import { ScrapedProduct, ScraperResult } from "./types";
 
-// AI-related search queries for GitHub
+// AI-related search queries for GitHub - HIGH bar (10k+ stars) for quality
+// These should be genuinely popular DEVELOPER TOOLS, not ML libraries or academic code
 const AI_QUERIES = [
-  "topic:machine-learning stars:>100",
-  "topic:artificial-intelligence stars:>100",
-  "topic:llm stars:>50",
-  "topic:gpt stars:>50",
-  "topic:deep-learning stars:>100",
-  "topic:chatgpt stars:>50",
-  "topic:generative-ai stars:>30",
-  "langchain stars:>50",
-  "llama stars:>50",
-  "stable-diffusion stars:>50",
+  "topic:ai-tools stars:>10000",
+  "topic:developer-tools ai stars:>10000",
+  "topic:llm stars:>10000",
+  "topic:gpt stars:>10000",
+  "topic:generative-ai stars:>10000",
+  "langchain stars:>10000",
+  "copilot stars:>10000",
 ];
+
+// Blocklist patterns - reject repos matching these in name/description
+const BLOCKLIST_PATTERNS = [
+  /tutorial/i,
+  /course/i,
+  /learning/i,
+  /demo/i,
+  /example/i,
+  /game/i,
+  /thesis/i,
+  /homework/i,
+  /assignment/i,
+  /lecture/i,
+  /workshop/i,
+  /awesome-/i,  // Awesome lists are not products
+  /papers/i,
+  /research/i,
+  /experiment/i,
+  /toy/i,
+  /playground/i,
+];
+
+// Check if repo should be blocked based on name/description
+function shouldBlockRepo(name: string, description: string | null): boolean {
+  const text = `${name} ${description || ""}`.toLowerCase();
+  return BLOCKLIST_PATTERNS.some(pattern => pattern.test(text));
+}
 
 export async function scrapeGitHub(): Promise<ScraperResult> {
   const token = process.env.GITHUB_TOKEN;
@@ -41,25 +66,32 @@ export async function scrapeGitHub(): Promise<ScraperResult> {
           if (seenRepos.has(repo.full_name)) continue;
           seenRepos.add(repo.full_name);
 
+          // QUALITY FILTER: Require minimum 10k stars
+          if ((repo.stargazers_count || 0) < 10000) continue;
+
+          // QUALITY FILTER: Require homepage URL (real products have websites)
+          if (!repo.homepage) continue;
+
+          // QUALITY FILTER: Block tutorials, games, academic projects
+          if (shouldBlockRepo(repo.name, repo.description)) {
+            console.log(`[GitHub] Blocked: ${repo.name} (matches blocklist)`);
+            continue;
+          }
+
           // Extract topics/tags
           const tags = repo.topics?.slice(0, 5) || [];
           
-          // Determine category from topics
-          let category = "AI Tools";
-          if (tags.includes("machine-learning")) category = "Machine Learning";
-          if (tags.includes("deep-learning")) category = "Deep Learning";
-          if (tags.includes("nlp") || tags.includes("natural-language-processing")) category = "NLP";
-          if (tags.includes("computer-vision")) category = "Computer Vision";
-          if (tags.includes("llm") || tags.includes("gpt")) category = "LLM";
+          // GitHub repos go into "Developer Tools" category
+          const category = "Developer Tools";
 
           allProducts.push({
             name: repo.name,
             tagline: repo.description?.slice(0, 150) || undefined,
             description: repo.description || undefined,
-            website: repo.homepage || repo.html_url,
+            website: repo.homepage, // Use actual homepage, not GitHub URL
             logo: repo.owner?.avatar_url,
             category,
-            tags: tags.length > 0 ? tags : ["AI", "Open Source"],
+            tags: tags.length > 0 ? [...tags, "Open Source", "Developer Tools"] : ["AI", "Open Source", "Developer Tools"],
             launchDate: new Date(repo.created_at || Date.now()),
             source: "GITHUB",
             sourceUrl: repo.html_url,

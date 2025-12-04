@@ -5,13 +5,14 @@ import { scrapeTheresAnAI } from "./theres-an-ai";
 import { ScraperResult, ScrapedProduct } from "./types";
 import prisma from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { assessCommercialViability, ViabilityAssessment } from "@/lib/ai/gatekeeper";
 
 export { scrapeProductHunt, scrapeGitHub, scrapeHackerNews, scrapeTheresAnAI };
 export type { ScraperResult, ScrapedProduct };
 
 // Storage limits for free tier (0.5GB Neon)
 const MAX_PRODUCTS = 1000;
-const MIN_QUALITY_SCORE = 30; // Minimum engagement score to keep
+const MIN_QUALITY_SCORE = 50; // Raised threshold - only keep quality products
 
 // Calculate quality score based on engagement signals
 function calculateQualityScore(product: ScrapedProduct): number {
@@ -147,13 +148,14 @@ export async function scrapeAll(): Promise<{
   return { total, results };
 }
 
-// Save scraped products to database with quality filtering
+// Save scraped products to database with quality filtering and AI gatekeeper
 export async function saveScrapedProducts(
   products: ScrapedProduct[]
-): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
+): Promise<{ created: number; updated: number; skipped: number; rejected: number; errors: number }> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
+  let rejected = 0; // Products rejected by AI gatekeeper
   let errors = 0;
 
   // Check current product count
@@ -165,8 +167,37 @@ export async function saveScrapedProducts(
     .map(p => ({ product: p, quality: calculateQualityScore(p) }))
     .sort((a, b) => b.quality - a.quality);
 
+  // Cache for viability assessments (avoid re-assessing)
+  const viabilityCache = new Map<string, ViabilityAssessment>();
+
   for (const { product, quality } of sortedProducts) {
     try {
+      // LAYER 1: Quality score filter
+      if (quality < MIN_QUALITY_SCORE) {
+        skipped++;
+        continue;
+      }
+
+      // LAYER 2: AI Gatekeeper - Check commercial viability
+      const cacheKey = product.sourceId || product.name;
+      let viability = viabilityCache.get(cacheKey);
+      
+      if (!viability) {
+        console.log(`[Gatekeeper] Assessing: ${product.name}`);
+        viability = await assessCommercialViability(product);
+        viabilityCache.set(cacheKey, viability);
+        
+        // Small delay between API calls (we have 2000 RPM, but be respectful)
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Reject if not a commercial B2B SaaS (allow developer tools too)
+      if (!viability.isCommercialSaaS && viability.targetAudience !== "developer") {
+        console.log(`[Gatekeeper] REJECTED: ${product.name} - ${viability.rejectionReason || "Not commercial B2B SaaS"}`);
+        rejected++;
+        continue;
+      }
+
       // Generate slug
       const baseSlug = slugify(product.name);
       
@@ -193,6 +224,10 @@ export async function saveScrapedProducts(
             comments: Math.max(product.comments || 0, existing.comments),
             stars: Math.max(product.stars || 0, existing.stars),
             targetRoles: JSON.stringify(inferTargetRoles(product)),
+            // Update viability data from gatekeeper
+            viabilityScore: viability.confidence,
+            targetAudience: viability.targetAudience,
+            productType: viability.productType,
             updatedAt: new Date(),
           },
         });
@@ -257,7 +292,10 @@ export async function saveScrapedProducts(
             upvotes: product.upvotes || 0,
             comments: product.comments || 0,
             stars: product.stars || 0,
-            // rawData removed for storage optimization
+            // Viability data from AI gatekeeper
+            viabilityScore: viability.confidence,
+            targetAudience: viability.targetAudience,
+            productType: viability.productType,
           },
         });
         created++;
@@ -268,9 +306,9 @@ export async function saveScrapedProducts(
     }
   }
 
-  console.log(`[Scraper] Results: ${created} created, ${updated} updated, ${skipped} skipped, ${errors} errors`);
+  console.log(`[Scraper] Results: ${created} created, ${updated} updated, ${skipped} skipped (low quality), ${rejected} rejected (gatekeeper), ${errors} errors`);
 
-  return { created, updated, skipped, errors };
+  return { created, updated, skipped, rejected, errors };
 }
 
 // Cleanup old/low-quality products (run periodically)
