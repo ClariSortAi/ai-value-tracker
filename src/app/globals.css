@@ -1,24 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  /* Core palette - clean, professional */
-  --background: #fafafa;
-  --background-secondary: #f0f0f0;
-  --foreground: #111111;
-  --foreground-muted: #555555;
-  --foreground-subtle: #888888;
+  /* Core palette - GraniteAI-inspired */
+  --brand-navy: #0f1a2a;
+  --brand-navy-soft: #1f2d40;
+  --brand-orange: #f5821f;
+  --brand-orange-dark: #d86e18;
+  --background: #f8f5f1;
+  --background-secondary: #f0ebe5;
+  --foreground: #0f1a2a;
+  --foreground-muted: #344152;
+  --foreground-subtle: #6c7684;
   
-  /* Accent - refined blue */
-  --accent: #0066cc;
-  --accent-hover: #0052a3;
-  --accent-light: rgba(0, 102, 204, 0.08);
+  /* Accent */
+  --accent: var(--brand-orange);
+  --accent-hover: var(--brand-orange-dark);
+  --accent-light: rgba(245, 130, 31, 0.12);
   
   /* Cards - elevation system */
   --card-bg: #ffffff;
-  --card-border: #e8e8e8;
-  --card-border-hover: #0066cc;
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --card-shadow-hover: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --card-border: #e5dcd0;
+  --card-border-hover: var(--brand-orange);
+  --card-shadow: 0 6px 16px rgba(15, 26, 42, 0.06);
+  --card-shadow-hover: 0 14px 28px rgba(15, 26, 42, 0.12);
   
   /* Score color tiers */
   --score-high: #059669;
@@ -172,34 +176,34 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
+  padding: 13px 26px;
   font-size: 15px;
-  font-weight: 500;
-  border-radius: var(--radius-sm);
+  font-weight: 600;
+  border-radius: 999px;
   cursor: pointer;
   transition: all var(--transition-fast);
   border: none;
 }
 
 .btn-primary {
-  background: var(--foreground);
-  color: var(--background);
+  background: var(--brand-orange);
+  color: #fff;
 }
 
 .btn-primary:hover {
-  background: #333333;
+  background: var(--brand-orange-dark);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  background: var(--card-bg);
-  color: var(--foreground);
+  background: transparent;
+  color: var(--brand-navy);
   border: 1px solid var(--card-border);
 }
 
 .btn-secondary:hover {
-  border-color: var(--foreground-subtle);
-  background: var(--background-secondary);
+  border-color: var(--brand-orange);
+  background: rgba(245, 130, 31, 0.06);
 }
 
 /* Input system */
@@ -234,17 +238,17 @@ input::placeholder {
   display: inline-flex;
   align-items: center;
   padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--foreground-muted);
-  background: var(--background-secondary);
-  border-radius: 100px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-navy);
+  background: rgba(15, 26, 42, 0.06);
+  border-radius: 999px;
   transition: background var(--transition-fast);
 }
 
 .tag-accent {
-  color: var(--accent);
-  background: var(--accent-light);
+  color: var(--brand-orange);
+  background: rgba(245, 130, 31, 0.14);
 }
 
 /* Score badge system */

@@ -31,7 +31,7 @@ export function RoleTabs({ activeRole, onRoleChange }: RoleTabsProps) {
                 key={role.id}
                 onClick={() => onRoleChange(role.id)}
                 className={cn(
-                  "relative py-4 text-sm font-medium whitespace-nowrap transition-colors",
+                  "relative py-4 text-sm font-semibold whitespace-nowrap transition-colors",
                   "focus:outline-none focus-visible:text-[var(--foreground)]",
                   isActive
                     ? "text-[var(--foreground)]"
@@ -42,7 +42,7 @@ export function RoleTabs({ activeRole, onRoleChange }: RoleTabsProps) {
                 {/* Active indicator line */}
                 {isActive && (
                   <span 
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--foreground)] rounded-full"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--brand-orange)] rounded-full"
                   />
                 )}
               </button>

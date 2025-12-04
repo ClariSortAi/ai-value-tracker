@@ -76,6 +76,8 @@ PRODUCT_HUNT_TOKEN=your-product-hunt-token
 GEMINI_API_KEY=your-gemini-api-key
 GITHUB_TOKEN=your-github-token
 CRON_SECRET=your-cron-secret
+# Optional: if Deployment Protection is on
+VERCEL_AUTOMATION_BYPASS_SECRET=your-bypass-token
 ```
 
 **Important:** Set these for **Production**, **Preview**, and **Development** environments.
@@ -83,13 +85,20 @@ CRON_SECRET=your-cron-secret
 ## Step 5: Verify Cron Jobs
 
 After deployment, cron jobs will run:
-- **Scrape**: Every Sunday at 6:00 AM UTC (`/api/scrape`)
-- **Score**: Every Sunday at 8:00 AM UTC (`/api/score`)
+- **Scrape**: Sunday 06:00 UTC (`/api/scrape`)
+- **Score**: Sunday 08:00 UTC (`/api/score`)
 
 You can manually trigger them:
 ```bash
 curl -X POST https://your-app.vercel.app/api/scrape
 curl -X POST https://your-app.vercel.app/api/score
+```
+
+Or use the server-side trigger:
+```bash
+curl -X POST https://your-app.vercel.app/api/admin/run \
+  -H "Content-Type: application/json" \
+  -d '{ "action": "scrape" }'
 ```
 
 ## Step 6: First Scrape

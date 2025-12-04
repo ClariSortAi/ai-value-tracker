@@ -27,7 +27,12 @@ interface Product {
   logo: string | null;
   category: string | null;
   tags: string[];
+  targetRoles?: string[];
+  source?: string | null;
   launchDate: string;
+  upvotes?: number | null;
+  comments?: number | null;
+  stars?: number | null;
   scores: Score[];
 }
 
@@ -137,6 +142,19 @@ export default function ProductDetailPage() {
 
   const score = product.scores?.[0];
   const showFallback = !product.logo || imageError;
+  const roles = product.targetRoles || [];
+
+  const useCases = (product.description || product.tagline || "")
+    .split(".")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const signals = [
+    product.upvotes ? { label: "Upvotes", value: product.upvotes } : null,
+    product.stars ? { label: "Stars", value: product.stars } : null,
+    product.comments ? { label: "Comments", value: product.comments } : null,
+  ].filter(Boolean) as { label: string; value: number }[];
 
   return (
     <div className="min-h-screen bg-[var(--background)]">
@@ -221,11 +239,11 @@ export default function ProductDetailPage() {
 
         {/* Main Content */}
         <div className="grid lg:grid-cols-3 gap-10">
-          {/* Left: Description + CTA */}
+          {/* Left: Description + Use cases + CTA */}
           <div className="lg:col-span-2 space-y-8">
             {/* Description */}
             {product.description && (
-              <section>
+              <section className="card p-6">
                 <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
                   About
                 </h2>
@@ -235,24 +253,109 @@ export default function ProductDetailPage() {
               </section>
             )}
 
+            {/* Use cases */}
+            {useCases.length > 0 && (
+              <section className="card p-6">
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-3">
+                  Why it matters
+                </h2>
+                <ul className="space-y-2 text-[var(--foreground-muted)]">
+                  {useCases.map((uc, idx) => (
+                    <li key={idx} className="flex gap-2">
+                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--foreground-subtle)] flex-shrink-0" />
+                      <span>{uc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             {/* CTA */}
             {product.website && (
-              <a
-                href={product.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-primary inline-flex"
-              >
-                Visit Website
-                <ExternalLink className="w-4 h-4" />
-              </a>
+              <div className="card p-6 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--foreground)]">Visit {product.name}</h3>
+                  <p className="text-sm text-[var(--foreground-subtle)]">Open the product website in a new tab.</p>
+                </div>
+                <a
+                  href={product.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-primary inline-flex"
+                >
+                  Visit Website
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              </div>
             )}
           </div>
 
-          {/* Right: Score Breakdown */}
-          {score && (
-            <div className="lg:col-span-1">
-              <div className="card p-6 sticky top-24">
+          {/* Right column: At a Glance + Score Breakdown */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="card p-6 sticky top-20 space-y-5">
+              <h2 className="text-lg font-semibold text-[var(--foreground)]">At a Glance</h2>
+              <div className="grid grid-cols-1 gap-3 text-sm">
+                {score && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--foreground-subtle)]">AI Score</span>
+                    <span className={`score-badge ${getCompositeScoreClass(score.compositeScore)}`}>
+                      {score.compositeScore}
+                    </span>
+                  </div>
+                )}
+                {product.source && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--foreground-subtle)]">Source</span>
+                    <span className="tag text-xs">{product.source}</span>
+                  </div>
+                )}
+                {roles.length > 0 && (
+                  <div>
+                    <span className="text-[var(--foreground-subtle)]">Roles</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {roles.slice(0, 3).map((role) => (
+                        <span key={role} className="tag text-xs">{role}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {product.launchDate && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--foreground-subtle)]">Launched</span>
+                    <span className="text-[var(--foreground)] text-sm">
+                      {new Date(product.launchDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+                {product.tags?.length > 0 && (
+                  <div>
+                    <span className="text-[var(--foreground-subtle)]">Tags</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {product.tags.slice(0, 5).map((tag) => (
+                        <span key={tag} className="tag text-xs">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {signals.length > 0 && (
+                <div className="pt-3 border-t border-[var(--card-border)]">
+                  <h3 className="text-sm font-semibold text-[var(--foreground)] mb-2">Signals</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {signals.map((sig) => (
+                      <div key={sig.label} className="rounded-lg bg-[var(--background-secondary)] px-3 py-2">
+                        <div className="text-[var(--foreground-subtle)]">{sig.label}</div>
+                        <div className="text-[var(--foreground)] font-semibold">{sig.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {score && (
+              <div className="card p-6">
                 <h2 className="text-lg font-semibold text-[var(--foreground)] mb-2">
                   Score Breakdown
                 </h2>
@@ -268,8 +371,8 @@ export default function ProductDetailPage() {
                   <ScoreBar label={SCORE_LABELS.security} value={score.security} />
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

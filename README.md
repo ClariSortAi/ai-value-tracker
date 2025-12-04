@@ -9,12 +9,13 @@ A transparent, evidence-based scoring system to discover and evaluate AI product
 
 ## Features
 
-- **Multi-Source Data Collection**: Aggregates AI products from Product Hunt, GitHub, Hacker News, There's An AI, and Hugging Face
-- **AI-Powered Scoring**: Uses Google Gemini to evaluate products across 6 key categories
-- **Transparent Methodology**: Based on ISO/IEC 25010 and industry best practices
-- **Beautiful UI**: Apple/OpenAI-grade design with glassmorphism, animations, and dark mode
-- **Compare Products**: Side-by-side comparison tool
-- **Free to Run**: Designed for Vercel free tier with SQLite/Neon Postgres
+- **Multi-Source Data Collection**: Product Hunt, GitHub (10k+ stars dev tools), Hacker News, There's An AI
+- **Two-Stage Quality Gate**: Rule filters + AI gatekeeper (Gemini) for commercial B2B relevance
+- **AI-Powered Scoring**: Gemini evaluates products across 6 dimensions; stored in Neon Postgres
+- **On-Demand Controls**: Run Scrape → Assess (gatekeeper) → Score from the UI or via `/api/admin/run`
+- **Transparent Methodology**: ISO/IEC 25010-inspired scoring; signals (upvotes/stars/comments) shown in detail view
+- **Polished UI**: Granite-inspired palette, spacing, chips/score pills, at-a-glance panel, signals, use-cases; mobile friendly
+- **Free to Run**: Fits Vercel free tier + Neon (0.5 GB) with lean payloads
 
 ## Scoring Categories
 
@@ -31,10 +32,10 @@ A transparent, evidence-based scoring system to discover and evaluate AI product
 
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS v4 + Framer Motion
+- **Styling**: Tailwind CSS v4
 - **Database**: SQLite (dev) / Neon Postgres (prod)
 - **ORM**: Prisma 5
-- **AI**: Google Gemini 1.5 Flash
+- **AI**: Google Gemini
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
@@ -87,6 +88,9 @@ GITHUB_TOKEN="your-github-token"
 
 # Cron job protection (for production)
 CRON_SECRET="your-secret-key"
+
+# Optional: if using Vercel Deployment Protection
+VERCEL_AUTOMATION_BYPASS_SECRET="your-bypass-token"
 ```
 
 ### Database Commands
@@ -104,27 +108,30 @@ npm run db:reset     # Reset and reseed database
 ├── src/
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── products/     # Products REST API
-│   │   │   ├── scrape/       # Scraping cron endpoint
-│   │   │   └── score/        # Scoring cron endpoint
-│   │   ├── products/         # Products list & detail pages
-│   │   ├── compare/          # Comparison tool
-│   │   ├── about/            # Methodology page
-│   │   └── page.tsx          # Landing page
+│   │   │   ├── products/       # Products REST API
+│   │   │   ├── scrape/         # Scraping cron/on-demand
+│   │   │   ├── assess/         # AI gatekeeper viability batch
+│   │   │   ├── score/          # Scoring batch
+│   │   │   └── admin/run/      # Server-side trigger for scrape/assess/score
+│   │   ├── products/           # Products list & detail pages
+│   │   ├── compare/            # Comparison tool
+│   │   ├── about/              # Methodology page
+│   │   └── page.tsx            # Landing page (search, run controls)
 │   ├── components/
-│   │   ├── ui/               # Base UI components
-│   │   ├── product-card.tsx  # Product card component
-│   │   ├── score-badge.tsx   # Score visualization
-│   │   └── score-radar.tsx   # Radar chart component
+│   │   ├── ui/                 # Base UI components
+│   │   ├── tool-card.tsx       # Product card (spacing/chips/score)
+│   │   ├── product-card.tsx    # Legacy/compare card
+│   │   ├── score-badge.tsx     # Score visualization
+│   │   └── score-radar.tsx     # Radar chart component
 │   └── lib/
-│       ├── scrapers/         # Data source scrapers
-│       ├── ai/               # Gemini scoring logic
-│       ├── db.ts             # Prisma client
-│       └── utils.ts          # Utility functions
+│       ├── scrapers/           # Data source scrapers + gatekeeper integration
+│       ├── ai/                 # Gemini scoring logic & gatekeeper
+│       ├── db.ts               # Prisma client
+│       └── utils.ts            # Utility functions
 ├── prisma/
-│   ├── schema.prisma         # Database schema
-│   └── seed.ts               # Seed script
-└── vercel.json               # Vercel cron configuration
+│   ├── schema.prisma           # Database schema
+│   └── seed.ts                 # Seed script
+└── vercel.json                 # Vercel cron configuration
 ```
 
 ## Deployment
@@ -157,16 +164,19 @@ npm run db:reset     # Reset and reseed database
 |----------|--------|-------------|
 | `/api/products` | GET | List products with filters |
 | `/api/products/[slug]` | GET | Get product details |
-| `/api/scrape` | GET/POST | Trigger scraping job |
-| `/api/score` | GET | Score pending products |
-| `/api/score` | POST | Score specific product |
+| `/api/scrape` | GET/POST | Trigger scraping job (fast mode saves unassessed) |
+| `/api/assess` | GET/POST | AI gatekeeper batch viability assessment |
+| `/api/score` | GET/POST | Score pending products or a specific product |
+| `/api/admin/run` | POST | `{ action: "scrape" | "assess" | "score" }` server-side trigger |
 
 ## Cron Jobs
 
 Configured in `vercel.json`:
 
-- **Scraping**: Every 12 hours
-- **Scoring**: Daily at 1 AM UTC
+- **Scraping**: Sunday 06:00 UTC (`/api/scrape`)
+- **Scoring**: Sunday 08:00 UTC (`/api/score`)
+
+If using Vercel Deployment Protection, add unprotected paths for these routes or send `x-vercel-protection-bypass` from your scheduler with `VERCEL_AUTOMATION_BYPASS_SECRET`.
 
 ## Contributing
 

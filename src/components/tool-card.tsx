@@ -14,6 +14,8 @@ interface ToolCardProps {
     logo?: string | null;
     category?: string | null;
     tags?: string[];
+  targetRoles?: string[];
+  source?: string | null;
     launchDate: string | Date;
     scores?: {
       compositeScore: number;
@@ -79,12 +81,12 @@ export function ToolCard({ product }: ToolCardProps) {
 
   return (
     <Link href={`/products/${product.slug}`} className="block group">
-      <article className="card card-interactive h-full p-5 flex flex-col">
+      <article className="card card-interactive h-full p-6 flex flex-col gap-3">
         {/* Header: Logo + Score */}
-        <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-start justify-between gap-3">
           {/* Logo/Avatar */}
           <div 
-            className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center"
+            className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center shadow-sm"
             style={showFallback ? { background: getAvatarGradient(product.name) } : { background: 'var(--background-secondary)' }}
           >
             {!showFallback ? (
@@ -106,29 +108,39 @@ export function ToolCard({ product }: ToolCardProps) {
           
           {/* Score Badge */}
           {score !== null && (
-            <div className={`score-badge ${getScoreClass(score)}`}>
+            <div className={`score-badge ${getScoreClass(score)} shadow-sm`}>
               {score}
             </div>
           )}
         </div>
 
         {/* Name */}
-        <h3 className="text-[17px] font-semibold text-[var(--foreground)] mb-1.5 line-clamp-1">
+        <h3 className="text-[17px] font-semibold text-[var(--foreground)] line-clamp-1">
           {product.name}
         </h3>
 
         {/* Tagline */}
         {product.tagline && (
-          <p className="text-[15px] text-[var(--foreground-muted)] mb-4 leading-relaxed line-clamp-2 flex-grow">
+          <p className="text-[15px] text-[var(--foreground-muted)] leading-relaxed line-clamp-2 flex-grow">
             {product.tagline}
           </p>
         )}
 
-        {/* Tags */}
-        <div className="flex flex-wrap gap-1.5 mb-4">
+        {/* Tags / meta */}
+        <div className="flex flex-wrap gap-1.5">
           {product.category && (
             <span className="tag tag-accent text-xs">
               {product.category}
+            </span>
+          )}
+          {product.targetRoles?.[0] && (
+            <span className="tag text-xs">
+              {product.targetRoles[0]}
+            </span>
+          )}
+          {product.source && (
+            <span className="tag text-xs">
+              {product.source === "PRODUCT_HUNT" ? "Product Hunt" : product.source === "GITHUB" ? "GitHub" : product.source === "HACKER_NEWS" ? "Hacker News" : product.source}
             </span>
           )}
           {tags.map((tag) => (
