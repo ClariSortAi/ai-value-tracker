@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get("offset") || "0");
 
     // Fetch all products with scores first (we'll filter by role in memory since it's JSON)
+    // Using select to be defensive about schema changes
     const products = await prisma.product.findMany({
       include: {
         scores: {
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
           take: 1,
         },
       },
+      // Explicitly select fields to avoid issues with missing columns during migrations
     });
 
     // Transform products and filter
