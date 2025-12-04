@@ -1,16 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeAll, saveScrapedProducts } from "@/lib/scrapers";
 
+// Force dynamic execution - prevent caching
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 // This route handles the combined scraping job
 // In production, call this via Vercel Cron
 export async function GET(request: NextRequest) {
-  // Vercel Cron sends x-vercel-cron header, manual triggers need CRON_SECRET
+  // Check if this is a Vercel Cron request
   const isVercelCron = request.headers.get("x-vercel-cron") === "1";
+  
+  // Check for manual trigger with CRON_SECRET
   const authHeader = request.headers.get("authorization");
-  const isAuthorized = isVercelCron || (process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`);
+  const hasValidSecret = process.env.CRON_SECRET 
+    ? authHeader === `Bearer ${process.env.CRON_SECRET}`
+    : false;
+  
+  // Allow in development without auth (for testing)
+  const isDevelopment = process.env.NODE_ENV !== "production";
+  
+  // Authorize if: Vercel Cron OR valid secret OR development mode
+  const isAuthorized = isVercelCron || hasValidSecret || isDevelopment;
+  
+  // Log authentication attempt for debugging
+  console.log("Scrape job auth check:", {
+    timestamp: new Date().toISOString(),
+    isVercelCron,
+    hasAuthHeader: !!authHeader,
+    hasCronSecret: !!process.env.CRON_SECRET,
+    hasValidSecret,
+    isDevelopment,
+    isAuthorized,
+    nodeEnv: process.env.NODE_ENV,
+  });
   
   if (!isAuthorized) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    console.error("Unauthorized scrape attempt:", {
+      hasVercelCronHeader: !!request.headers.get("x-vercel-cron"),
+      hasAuthHeader: !!authHeader,
+      hasCronSecret: !!process.env.CRON_SECRET,
+      nodeEnv: process.env.NODE_ENV,
+    });
+    return NextResponse.json({ 
+      error: "Unauthorized",
+      hint: process.env.CRON_SECRET 
+        ? "Set Authorization: Bearer CRON_SECRET header" 
+        : "Set CRON_SECRET env var or use Vercel Cron"
+    }, { status: 401 });
   }
 
   try {
