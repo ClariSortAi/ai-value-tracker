@@ -19,7 +19,7 @@
   
   /* Cards - elevation system */
   --card-bg: #ffffff;
-  --card-border: #e5dcd0;
+  --card-border: #e9dfd4;
   --card-border-hover: var(--brand-orange);
   --card-shadow: 0 6px 16px rgba(15, 26, 42, 0.06);
   --card-shadow-hover: 0 14px 28px rgba(15, 26, 42, 0.12);
@@ -297,13 +297,13 @@ input::placeholder {
 .container {
   max-width: 720px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 20px;
 }
 
 .container-wide {
-  max-width: 1200px;
+  max-width: 1220px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 20px;
 }
 
 /* Gradient text utility */

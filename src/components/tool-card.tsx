@@ -81,7 +81,7 @@ export function ToolCard({ product }: ToolCardProps) {
 
   return (
     <Link href={`/products/${product.slug}`} className="block group">
-      <article className="card card-interactive h-full p-6 flex flex-col gap-3">
+      <article className="card card-interactive h-full p-7 flex flex-col gap-3.5">
         {/* Header: Logo + Score */}
         <div className="flex items-start justify-between gap-3">
           {/* Logo/Avatar */}
@@ -127,7 +127,7 @@ export function ToolCard({ product }: ToolCardProps) {
         )}
 
         {/* Tags / meta */}
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {product.category && (
             <span className="tag tag-accent text-xs">
               {product.category}
@@ -153,7 +153,7 @@ export function ToolCard({ product }: ToolCardProps) {
         {/* Footer */}
         <div className="flex items-center justify-between pt-3 border-t border-[var(--card-border)] mt-auto">
           <span className="text-xs text-[var(--foreground-subtle)]">
-            {formatRelativeDate(product.launchDate)}
+            Discovered {formatRelativeDate(product.launchDate)}
           </span>
           
           <span className="inline-flex items-center gap-1 text-sm font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity">

@@ -123,13 +123,13 @@ export default function DiscoverPage() {
               placeholder="Search tools..."
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-14 pr-6 py-4 text-base"
+              className="w-full pl-14 pr-6 py-4 text-base rounded-full"
             />
           </div>
 
           {/* Run pipeline controls */}
-          <div className="mt-10 max-w-4xl mx-auto grid gap-4">
-            <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] p-5 text-left shadow-sm">
+          <div className="mt-10 max-w-4xl mx-auto grid gap-5">
+            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 text-left shadow-sm">
               <p className="text-sm text-[var(--foreground-subtle)] mb-4">
                 Run the pipeline in order. Assess performs smart classification (gatekeeper). Score comes last.
               </p>
