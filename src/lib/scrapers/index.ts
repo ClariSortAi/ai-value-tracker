@@ -2,17 +2,29 @@ import { scrapeProductHunt } from "./product-hunt";
 import { scrapeGitHub } from "./github";
 import { scrapeHackerNews } from "./hacker-news";
 import { scrapeTheresAnAI } from "./theres-an-ai";
-import { ScraperResult, ScrapedProduct } from "./types";
+import { scrapeHuggingFaceSpaces } from "./hugging-face";
+import {
+  ScraperResult,
+  ScrapedOpenSourceTool,
+  ScrapedProduct,
+} from "./types";
 import prisma from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { assessCommercialViability, ViabilityAssessment } from "@/lib/ai/gatekeeper";
 
-export { scrapeProductHunt, scrapeGitHub, scrapeHackerNews, scrapeTheresAnAI };
-export type { ScraperResult, ScrapedProduct };
+export {
+  scrapeProductHunt,
+  scrapeGitHub,
+  scrapeHackerNews,
+  scrapeTheresAnAI,
+  scrapeHuggingFaceSpaces,
+};
+export type { ScraperResult, ScrapedOpenSourceTool, ScrapedProduct };
 
 // Storage limits for free tier (0.5GB Neon)
 const MAX_PRODUCTS = 1000;
 const MIN_QUALITY_SCORE = 50; // Raised threshold - only keep quality products
+const MIN_OPEN_SOURCE_QUALITY = 20;
 
 // Calculate quality score based on engagement signals
 function calculateQualityScore(product: ScrapedProduct): number {
@@ -118,84 +130,102 @@ function inferTargetRoles(product: ScrapedProduct): string[] {
 // Run all scrapers and return combined results
 export async function scrapeAll(): Promise<{
   total: number;
-  results: Record<string, ScraperResult>;
+  results: {
+    productHunt: ScraperResult;
+    github: ScraperResult;
+    hackerNews: ScraperResult;
+    theresAnAI: ScraperResult;
+    huggingFace: ScraperResult<ScrapedOpenSourceTool>;
+  };
 }> {
-  const results: Record<string, ScraperResult> = {};
-
   console.log("[Scraper] Starting all scrapers...");
 
   // Run scrapers in parallel
-  const [productHunt, github, hackerNews, theresAnAI] = await Promise.all([
-    scrapeProductHunt(),
-    scrapeGitHub(),
-    scrapeHackerNews(),
-    scrapeTheresAnAI(),
-  ]);
+  const [productHunt, github, hackerNews, theresAnAI, huggingFace] =
+    await Promise.all([
+      scrapeProductHunt(),
+      scrapeGitHub(),
+      scrapeHackerNews(),
+      scrapeTheresAnAI(),
+      scrapeHuggingFaceSpaces(),
+    ]);
 
-  results.productHunt = productHunt;
-  results.github = github;
-  results.hackerNews = hackerNews;
-  results.theresAnAI = theresAnAI;
+  const results = {
+    productHunt,
+    github,
+    hackerNews,
+    theresAnAI,
+    huggingFace,
+  };
 
   const total =
     productHunt.products.length +
     github.products.length +
     hackerNews.products.length +
-    theresAnAI.products.length;
+    theresAnAI.products.length +
+    huggingFace.products.length;
 
   console.log(`[Scraper] Total scraped: ${total} products`);
 
   return { total, results };
 }
 
-// Save scraped products to database with quality filtering and AI gatekeeper
+// Save scraped products to database with quality filtering
+// When skipGatekeeper=true, products are saved without AI assessment (faster, for cron jobs)
+// The /api/assess endpoint will later assess products with viabilityScore=null
 export async function saveScrapedProducts(
-  products: ScrapedProduct[]
+  products: ScrapedProduct[],
+  skipGatekeeper: boolean = false // Skip AI assessment for fast execution within timeout
 ): Promise<{ created: number; updated: number; skipped: number; rejected: number; errors: number }> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
-  let rejected = 0; // Products rejected by AI gatekeeper
+  let rejected = 0; // Products rejected by AI gatekeeper (only when skipGatekeeper=false)
   let errors = 0;
 
   // Check current product count
   const currentCount = await prisma.product.count();
   console.log(`[Scraper] Current DB count: ${currentCount}/${MAX_PRODUCTS}`);
+  console.log(`[Scraper] Gatekeeper mode: ${skipGatekeeper ? "SKIPPED (fast mode)" : "ENABLED"}`);
 
   // Sort products by quality score (best first)
   const sortedProducts = products
     .map(p => ({ product: p, quality: calculateQualityScore(p) }))
     .sort((a, b) => b.quality - a.quality);
 
-  // Cache for viability assessments (avoid re-assessing)
+  // Cache for viability assessments (avoid re-assessing) - only used when gatekeeper enabled
   const viabilityCache = new Map<string, ViabilityAssessment>();
 
   for (const { product, quality } of sortedProducts) {
     try {
-      // LAYER 1: Quality score filter
+      // LAYER 1: Quality score filter (always active)
       if (quality < MIN_QUALITY_SCORE) {
         skipped++;
         continue;
       }
 
-      // LAYER 2: AI Gatekeeper - Check commercial viability
-      const cacheKey = product.sourceId || product.name;
-      let viability = viabilityCache.get(cacheKey);
+      // LAYER 2: AI Gatekeeper - Check commercial viability (skipped in fast mode)
+      let viability: ViabilityAssessment | null = null;
       
-      if (!viability) {
-        console.log(`[Gatekeeper] Assessing: ${product.name}`);
-        viability = await assessCommercialViability(product);
-        viabilityCache.set(cacheKey, viability);
+      if (!skipGatekeeper) {
+        const cacheKey = product.sourceId || product.name;
+        viability = viabilityCache.get(cacheKey) || null;
         
-        // Small delay between API calls (we have 2000 RPM, but be respectful)
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+        if (!viability) {
+          console.log(`[Gatekeeper] Assessing: ${product.name}`);
+          viability = await assessCommercialViability(product);
+          viabilityCache.set(cacheKey, viability);
+          
+          // Small delay between API calls (we have 2000 RPM, but be respectful)
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
 
-      // Reject if not a commercial B2B SaaS (allow developer tools too)
-      if (!viability.isCommercialSaaS && viability.targetAudience !== "developer") {
-        console.log(`[Gatekeeper] REJECTED: ${product.name} - ${viability.rejectionReason || "Not commercial B2B SaaS"}`);
-        rejected++;
-        continue;
+        // Reject if not a commercial B2B SaaS (allow developer tools too)
+        if (!viability.isCommercialSaaS && viability.targetAudience !== "developer") {
+          console.log(`[Gatekeeper] REJECTED: ${product.name} - ${viability.rejectionReason || "Not commercial B2B SaaS"}`);
+          rejected++;
+          continue;
+        }
       }
 
       // Generate slug
@@ -224,10 +254,12 @@ export async function saveScrapedProducts(
             comments: Math.max(product.comments || 0, existing.comments),
             stars: Math.max(product.stars || 0, existing.stars),
             targetRoles: JSON.stringify(inferTargetRoles(product)),
-            // Update viability data from gatekeeper
-            viabilityScore: viability.confidence,
-            targetAudience: viability.targetAudience,
-            productType: viability.productType,
+            // Update viability data from gatekeeper (only if assessment was done)
+            ...(viability ? {
+              viabilityScore: viability.confidence,
+              targetAudience: viability.targetAudience,
+              productType: viability.productType,
+            } : {}),
             updatedAt: new Date(),
           },
         });
@@ -292,10 +324,10 @@ export async function saveScrapedProducts(
             upvotes: product.upvotes || 0,
             comments: product.comments || 0,
             stars: product.stars || 0,
-            // Viability data from AI gatekeeper
-            viabilityScore: viability.confidence,
-            targetAudience: viability.targetAudience,
-            productType: viability.productType,
+            // Viability data from AI gatekeeper (null if skipped - will be assessed later by /api/assess)
+            viabilityScore: viability?.confidence ?? null,
+            targetAudience: viability?.targetAudience ?? null,
+            productType: viability?.productType ?? null,
           },
         });
         created++;
@@ -309,6 +341,160 @@ export async function saveScrapedProducts(
   console.log(`[Scraper] Results: ${created} created, ${updated} updated, ${skipped} skipped (low quality), ${rejected} rejected (gatekeeper), ${errors} errors`);
 
   return { created, updated, skipped, rejected, errors };
+}
+
+// Quality score for open-source spaces (likes/downloads + description richness)
+function calculateOpenSourceQuality(tool: ScrapedOpenSourceTool): number {
+  let score = 0;
+
+  if (tool.likes) {
+    if (tool.likes >= 5000) score += 60;
+    else if (tool.likes >= 1000) score += 40;
+    else if (tool.likes >= 200) score += 25;
+    else if (tool.likes >= 50) score += 10;
+  }
+
+  if (tool.downloads) {
+    if (tool.downloads >= 100000) score += 40;
+    else if (tool.downloads >= 20000) score += 25;
+    else if (tool.downloads >= 5000) score += 15;
+  }
+
+  if (tool.description && tool.description.length > 120) score += 10;
+  if (tool.tags?.length > 0) score += 5;
+
+  return score;
+}
+
+// Save Hugging Face spaces into dedicated open-source table
+export async function saveOpenSourceTools(
+  tools: ScrapedOpenSourceTool[],
+  skipGatekeeper: boolean = false
+): Promise<{ created: number; updated: number; skipped: number; errors: number }> {
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  let errors = 0;
+
+  const sorted = tools
+    .map((t) => ({ tool: t, quality: calculateOpenSourceQuality(t) }))
+    .sort((a, b) => b.quality - a.quality);
+
+  const viabilityCache = new Map<string, ViabilityAssessment>();
+
+  for (const { tool, quality } of sorted) {
+    try {
+      if (quality < MIN_OPEN_SOURCE_QUALITY) {
+        skipped++;
+        continue;
+      }
+
+      let viability: ViabilityAssessment | null = null;
+
+      if (!skipGatekeeper) {
+        const cacheKey = tool.sourceId || tool.name;
+        viability = viabilityCache.get(cacheKey) || null;
+
+        if (!viability) {
+          console.log(`[Gatekeeper] Assessing (open-source): ${tool.name}`);
+          viability = await assessCommercialViability({
+            name: tool.name,
+            tagline: tool.tagline,
+            description: tool.description,
+            website: tool.spaceUrl || tool.repoUrl,
+            category: "Open Source",
+            tags: tool.tags,
+            launchDate: tool.launchDate,
+            source: tool.source,
+            sourceUrl: tool.sourceUrl,
+            sourceId: tool.sourceId,
+          });
+          viabilityCache.set(cacheKey, viability);
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+      }
+
+      const baseSlug = slugify(tool.name);
+
+      const existing = await prisma.openSourceTool.findFirst({
+        where: {
+          OR: [{ sourceId: tool.sourceId }, { slug: baseSlug }],
+        },
+      });
+
+      if (existing) {
+        await prisma.openSourceTool.update({
+          where: { id: existing.id },
+          data: {
+            tagline: tool.tagline || existing.tagline,
+            description: tool.description || existing.description,
+            repoUrl: tool.repoUrl || existing.repoUrl,
+            spaceUrl: tool.spaceUrl || existing.spaceUrl,
+            logo: tool.logo || existing.logo,
+            runtime: tool.runtime || existing.runtime,
+            license: tool.license || existing.license,
+            tags: JSON.stringify(tool.tags || []),
+            likes: Math.max(tool.likes || 0, existing.likes),
+            downloads: Math.max(tool.downloads || 0, existing.downloads),
+            author: tool.author || existing.author,
+            // Viability metadata
+            ...(viability
+              ? {
+                  viabilityScore: viability.confidence,
+                  targetAudience: viability.targetAudience,
+                  productType: viability.productType,
+                }
+              : {}),
+            updatedAt: new Date(),
+          },
+        });
+        updated++;
+      } else {
+        let slug = baseSlug;
+        let counter = 1;
+
+        while (await prisma.openSourceTool.findUnique({ where: { slug } })) {
+          slug = `${baseSlug}-${counter}`;
+          counter++;
+        }
+
+        await prisma.openSourceTool.create({
+          data: {
+            name: tool.name,
+            slug,
+            tagline: tool.tagline,
+            description: tool.description,
+            repoUrl: tool.repoUrl,
+            spaceUrl: tool.spaceUrl,
+            logo: tool.logo,
+            runtime: tool.runtime,
+            license: tool.license,
+            tags: JSON.stringify(tool.tags || []),
+            launchDate: tool.launchDate,
+            source: tool.source,
+            sourceUrl: tool.sourceUrl,
+            sourceId: tool.sourceId,
+            likes: tool.likes || 0,
+            downloads: tool.downloads || 0,
+            author: tool.author,
+            viabilityScore: viability?.confidence ?? null,
+            targetAudience: viability?.targetAudience ?? null,
+            productType: viability?.productType ?? null,
+          },
+        });
+        created++;
+      }
+    } catch (error) {
+      console.error(`[Scraper] Error saving open-source tool "${tool.name}":`, error);
+      errors++;
+    }
+  }
+
+  console.log(
+    `[Scraper] Open-source results: ${created} created, ${updated} updated, ${skipped} skipped (low quality), ${errors} errors`
+  );
+
+  return { created, updated, skipped, errors };
 }
 
 // Cleanup old/low-quality products (run periodically)

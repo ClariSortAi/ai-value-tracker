@@ -70,3 +70,63 @@ model Score {
   @@index([productId])
   @@index([compositeScore])
 }
+
+model OpenSourceTool {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  tagline     String?
+  description String?
+  repoUrl     String?
+  spaceUrl    String?
+  logo        String?
+  runtime     String?
+  license     String?
+  tags        String   @default("[]")
+  launchDate  DateTime @default(now())
+  source      String   @default("HUGGING_FACE")
+  sourceUrl   String?
+  sourceId    String?  @unique
+  author      String?
+
+  likes     Int @default(0)
+  downloads Int @default(0)
+
+  // AI Gatekeeper viability assessment fields (parity with Product)
+  viabilityScore Float?  @default(0)
+  targetAudience String?
+  productType    String?
+
+  scores OpenSourceScore[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([source])
+  @@index([launchDate])
+  @@index([author])
+  @@index([viabilityScore])
+}
+
+model OpenSourceScore {
+  id               String          @id @default(cuid())
+  openSourceToolId String
+  openSourceTool   OpenSourceTool  @relation(fields: [openSourceToolId], references: [id], onDelete: Cascade)
+
+  functionalCoverage Int @default(0)
+  usability          Int @default(0)
+  innovation         Int @default(0)
+  pricing            Int @default(0)
+  integration        Int @default(0)
+  security           Int @default(0)
+
+  compositeScore Int     @default(0)
+  confidence     Float   @default(0)
+  reasoning      String?
+  version        Int     @default(1)
+
+  generatedAt DateTime @default(now())
+
+  @@index([openSourceToolId])
+  @@index([compositeScore])
+}

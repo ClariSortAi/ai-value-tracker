@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import prisma from "@/lib/db";
 import { scoreProduct, type ProductData } from "@/lib/ai";
 
@@ -7,66 +8,58 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 // Score products that don't have scores yet
+// Vercel automatically sends Authorization: Bearer CRON_SECRET header when invoking cron jobs
 export async function GET(request: NextRequest) {
-  // Check if this is a Vercel Cron request (scheduled runs send this header)
-  const isVercelCron = request.headers.get("x-vercel-cron") === "1";
-  
-  // Check for manual trigger with CRON_SECRET in Authorization header
+  const requestId = randomUUID();
+  const path = "/api/score";
+
+  // Official Vercel authentication method (per Managing Cron Jobs.md)
+  // Vercel automatically sends Authorization header with CRON_SECRET for both scheduled and manual triggers
   const authHeader = request.headers.get("authorization");
-  const hasValidSecret = process.env.CRON_SECRET 
-    ? authHeader === `Bearer ${process.env.CRON_SECRET}`
-    : false;
   
-  // Check if request is from Vercel's internal network (for manual triggers from dashboard)
-  // Manual "Run Now" triggers may not send x-vercel-cron header, but come from Vercel
-  const userAgent = request.headers.get("user-agent") || "";
-  const vercelId = request.headers.get("x-vercel-id");
-  const vercelDeploymentUrl = request.headers.get("x-vercel-deployment-url");
-  const isVercelInternal = vercelId !== null || vercelDeploymentUrl !== null || userAgent.includes("vercel");
-  
-  // Allow in development without auth (for testing)
+  // Allow in development without auth (for local testing)
   const isDevelopment = process.env.NODE_ENV !== "production";
   
-  // SIMPLIFIED: If CRON_SECRET is set, allow Vercel internal requests (manual triggers)
-  // This handles the case where "Run Now" doesn't send x-vercel-cron header
-  const allowVercelManual = process.env.CRON_SECRET && isVercelInternal;
-  
-  // Authorize if: Vercel Cron OR valid secret OR Vercel internal (when CRON_SECRET exists) OR development mode
-  const isAuthorized = isVercelCron || hasValidSecret || allowVercelManual || isDevelopment;
-  
-  // Log authentication attempt for debugging
-  console.log("Score job auth check:", {
-    timestamp: new Date().toISOString(),
-    isVercelCron,
-    hasAuthHeader: !!authHeader,
-    hasCronSecret: !!process.env.CRON_SECRET,
-    hasValidSecret,
-    isVercelInternal,
-    allowVercelManual,
-    isDevelopment,
-    isAuthorized,
-    nodeEnv: process.env.NODE_ENV,
-    userAgent: userAgent.substring(0, 100), // Log first 100 chars
-    allHeaders: Object.fromEntries(request.headers.entries()),
-  });
+  const secret = process.env.CRON_SECRET;
+  const hasValidSecret =
+    !!secret &&
+    !!authHeader &&
+    (authHeader === `Bearer ${secret}` || authHeader === secret);
+
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const hasBypassHeader =
+    !!bypass &&
+    request.headers.get("x-vercel-protection-bypass") === bypass;
+
+  // Check if request is authorized
+  const isAuthorized = isDevelopment || hasValidSecret || hasBypassHeader;
   
   if (!isAuthorized) {
     console.error("Unauthorized score attempt:", {
-      hasVercelCronHeader: !!request.headers.get("x-vercel-cron"),
+      requestId,
+      path,
       hasAuthHeader: !!authHeader,
-      hasCronSecret: !!process.env.CRON_SECRET,
+      hasCronSecret: !!secret,
+      hasBypassHeader,
+      bypassConfigured: !!bypass,
+      authHeaderLength: authHeader?.length ?? 0,
+      authHeaderValue: authHeader,
+      secretPreview: secret ? `${secret.slice(0,4)}...${secret.slice(-4)}` : null,
       nodeEnv: process.env.NODE_ENV,
     });
     return NextResponse.json({ 
       error: "Unauthorized",
-      hint: process.env.CRON_SECRET 
-        ? "Set Authorization: Bearer CRON_SECRET header" 
-        : "Set CRON_SECRET env var or use Vercel Cron"
+      hint: "Vercel automatically sends Authorization: Bearer CRON_SECRET header. Ensure CRON_SECRET is set in Vercel environment variables."
     }, { status: 401 });
   }
 
   try {
-    console.log("Starting scoring job...");
+    console.log("Starting scoring job...", {
+      requestId,
+      path,
+      hasAuthHeader: !!authHeader,
+      isDevelopment,
+    });
 
     // Find products without scores
     const productsToScore = await prisma.product.findMany({
@@ -78,9 +71,24 @@ export async function GET(request: NextRequest) {
       take: 10, // Limit to avoid rate limits
     });
 
-    console.log(`Found ${productsToScore.length} products to score`);
+    const openSourceToScore = await prisma.openSourceTool.findMany({
+      where: {
+        scores: {
+          none: {},
+        },
+      },
+      take: 10,
+    });
+
+    console.log(`Found ${productsToScore.length} products to score`, { requestId });
 
     const results = {
+      scored: 0,
+      errors: 0,
+      products: [] as Array<{ name: string; score: number; confidence: number }>,
+    };
+
+    const openResults = {
       scored: 0,
       errors: 0,
       products: [] as Array<{ name: string; score: number; confidence: number }>,
@@ -126,7 +134,8 @@ export async function GET(request: NextRequest) {
         });
 
         console.log(
-          `Scored: ${product.name} = ${scoreResult.compositeScore} (confidence: ${scoreResult.confidence})`
+          `Scored: ${product.name} = ${scoreResult.compositeScore} (confidence: ${scoreResult.confidence})`,
+          { requestId }
         );
 
         // Rate limiting - Gemini free tier: 15 RPM
@@ -137,17 +146,68 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    for (const tool of openSourceToScore) {
+      try {
+        const productData: ProductData = {
+          name: tool.name,
+          tagline: tool.tagline || undefined,
+          description: tool.description || undefined,
+          website: tool.spaceUrl || tool.repoUrl || undefined,
+          category: "Open Source",
+          tags: JSON.parse(tool.tags || "[]"),
+          source: tool.source,
+          upvotes: tool.likes || undefined,
+          stars: tool.downloads || undefined,
+        };
+
+        const scoreResult = await scoreProduct(productData);
+
+        await prisma.openSourceScore.create({
+          data: {
+            openSourceToolId: tool.id,
+            functionalCoverage: scoreResult.scores.functionalCoverage,
+            usability: scoreResult.scores.usability,
+            innovation: scoreResult.scores.innovation,
+            pricing: scoreResult.scores.pricing,
+            integration: scoreResult.scores.integration,
+            security: scoreResult.scores.security,
+            compositeScore: scoreResult.compositeScore,
+            confidence: scoreResult.confidence,
+            reasoning: JSON.stringify(scoreResult.reasoning),
+          },
+        });
+
+        openResults.scored++;
+        openResults.products.push({
+          name: tool.name,
+          score: scoreResult.compositeScore,
+          confidence: scoreResult.confidence,
+        });
+
+        console.log(
+          `[OpenSource][Score] ${tool.name} = ${scoreResult.compositeScore} (confidence: ${scoreResult.confidence})`,
+          { requestId }
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      } catch (error) {
+        console.error(`[OpenSource] Error scoring ${tool.name}:`, error);
+        openResults.errors++;
+      }
+    }
+
     const summary = {
       message: "Scoring completed",
       timestamp: new Date().toISOString(),
       results,
+      openSource: openResults,
     };
 
-    console.log("Scoring summary:", JSON.stringify(summary, null, 2));
+    console.log("Scoring summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
     return NextResponse.json(summary);
   } catch (error) {
-    console.error("Scoring job error:", error);
+    console.error("Scoring job error:", { requestId, path, error });
     return NextResponse.json(
       {
         error: "Scoring job failed",

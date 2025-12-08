@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { Search, Play, CheckCircle2, AlertTriangle } from "lucide-react";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
+import { OpenSourceCard } from "@/components/open-source-card";
 
 interface Product {
   id: string;
@@ -19,9 +20,28 @@ interface Product {
   scores: { compositeScore: number }[];
 }
 
+interface OpenSourceTool {
+  id: string;
+  name: string;
+  slug: string;
+  tagline: string | null;
+  description: string | null;
+  logo: string | null;
+  runtime: string | null;
+  license: string | null;
+  tags: string[];
+  likes?: number | null;
+  downloads?: number | null;
+  spaceUrl?: string | null;
+  repoUrl?: string | null;
+  scores: { compositeScore: number }[];
+}
+
 export default function DiscoverPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openSourceTools, setOpenSourceTools] = useState<OpenSourceTool[]>([]);
+  const [loadingOpenSource, setLoadingOpenSource] = useState(true);
   const [search, setSearch] = useState("");
   const [activeRole, setActiveRole] = useState("all");
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -53,10 +73,24 @@ export default function DiscoverPage() {
     }
   }, []);
 
+  const fetchOpenSource = useCallback(async () => {
+    setLoadingOpenSource(true);
+    try {
+      const res = await fetch(`/api/open-source?sortBy=score&limit=24`);
+      const data = await res.json();
+      setOpenSourceTools(data.tools || []);
+    } catch (error) {
+      console.error("Failed to fetch open-source tools:", error);
+    } finally {
+      setLoadingOpenSource(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchProducts("", "all");
-  }, [fetchProducts]);
+    fetchOpenSource();
+  }, [fetchProducts, fetchOpenSource]);
 
   // Handle search with debounce
   const handleSearchChange = (value: string) => {
@@ -207,6 +241,43 @@ export default function DiscoverPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {products.map((product) => (
                 <ToolCard key={product.id} product={product} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Open Source Section */}
+      <section className="py-12 bg-[var(--background-secondary)]">
+        <div className="container-wide">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div>
+              <p className="text-sm text-[var(--foreground-subtle)] uppercase tracking-wide">
+                Hugging Face Spaces
+              </p>
+              <h2 className="text-2xl font-semibold text-[var(--foreground)]">
+                Open Source Spotlight
+              </h2>
+              <p className="text-[var(--foreground-muted)]">
+                Ranked with the same AI scoring used across the site.
+              </p>
+            </div>
+          </div>
+
+          {loadingOpenSource ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <ToolCardSkeleton key={i} />
+              ))}
+            </div>
+          ) : openSourceTools.length === 0 ? (
+            <div className="text-center py-10 text-[var(--foreground-muted)]">
+              No open-source tools available yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {openSourceTools.map((tool) => (
+                <OpenSourceCard key={tool.id} tool={tool} />
               ))}
             </div>
           )}

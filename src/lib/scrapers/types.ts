@@ -25,9 +25,29 @@ export interface ScrapedProduct {
   rawData?: Record<string, unknown>;
 }
 
-export interface ScraperResult {
+export interface ScraperResult<T = ScrapedProduct> {
   success: boolean;
-  products: ScrapedProduct[];
+  products: T[];
   error?: string;
+}
+
+export interface ScrapedOpenSourceTool {
+  name: string;
+  tagline?: string;
+  description?: string;
+  repoUrl?: string;
+  spaceUrl?: string;
+  logo?: string;
+  runtime?: string;
+  license?: string;
+  tags: string[];
+  launchDate: Date;
+  source: Source;
+  sourceUrl?: string;
+  sourceId?: string;
+  likes?: number;
+  downloads?: number;
+  author?: string;
+  rawData?: Record<string, unknown>;
 }
 

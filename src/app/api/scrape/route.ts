@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { scrapeAll, saveScrapedProducts } from "@/lib/scrapers";
+import { randomUUID } from "crypto";
+import { scrapeAll, saveOpenSourceTools, saveScrapedProducts } from "@/lib/scrapers";
+import type { ScrapedOpenSourceTool } from "@/lib/scrapers/types";
 
 // Force dynamic execution - prevent caching
 export const dynamic = 'force-dynamic';
@@ -7,70 +9,61 @@ export const runtime = 'nodejs';
 
 // This route handles the combined scraping job
 // In production, call this via Vercel Cron
+// Vercel automatically sends Authorization: Bearer CRON_SECRET header when invoking cron jobs
 export async function GET(request: NextRequest) {
-  // Check if this is a Vercel Cron request (scheduled runs send this header)
-  const isVercelCron = request.headers.get("x-vercel-cron") === "1";
-  
-  // Check for manual trigger with CRON_SECRET in Authorization header
+  const requestId = randomUUID();
+  const path = "/api/scrape";
+
+  // Official Vercel authentication method (per Managing Cron Jobs.md)
+  // Vercel automatically sends Authorization header with CRON_SECRET for both scheduled and manual triggers
   const authHeader = request.headers.get("authorization");
-  const hasValidSecret = process.env.CRON_SECRET 
-    ? authHeader === `Bearer ${process.env.CRON_SECRET}`
-    : false;
   
-  // Check if request is from Vercel's internal network (for manual triggers from dashboard)
-  // Manual "Run Now" triggers may not send x-vercel-cron header, but come from Vercel
-  const userAgent = request.headers.get("user-agent") || "";
-  const vercelId = request.headers.get("x-vercel-id");
-  const vercelDeploymentUrl = request.headers.get("x-vercel-deployment-url");
-  const isVercelInternal = vercelId !== null || vercelDeploymentUrl !== null || userAgent.includes("vercel");
-  
-  // Allow in development without auth (for testing)
+  // Allow in development without auth (for local testing)
   const isDevelopment = process.env.NODE_ENV !== "production";
   
-  // SIMPLIFIED: If CRON_SECRET is set, allow Vercel internal requests (manual triggers)
-  // This handles the case where "Run Now" doesn't send x-vercel-cron header
-  const allowVercelManual = process.env.CRON_SECRET && isVercelInternal;
-  
-  // Authorize if: Vercel Cron OR valid secret OR Vercel internal (when CRON_SECRET exists) OR development mode
-  const isAuthorized = isVercelCron || hasValidSecret || allowVercelManual || isDevelopment;
-  
-  // Log authentication attempt for debugging
-  console.log("Scrape job auth check:", {
-    timestamp: new Date().toISOString(),
-    isVercelCron,
-    hasAuthHeader: !!authHeader,
-    hasCronSecret: !!process.env.CRON_SECRET,
-    hasValidSecret,
-    isVercelInternal,
-    allowVercelManual,
-    isDevelopment,
-    isAuthorized,
-    nodeEnv: process.env.NODE_ENV,
-    userAgent: userAgent.substring(0, 100), // Log first 100 chars
-    allHeaders: Object.fromEntries(request.headers.entries()),
-  });
+  const secret = process.env.CRON_SECRET;
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+  const hasValidSecret =
+    !!secret &&
+    !!authHeader &&
+    (authHeader === `Bearer ${secret}` || authHeader === secret);
+  const hasBypassHeader =
+    !!bypass &&
+    request.headers.get("x-vercel-protection-bypass") === bypass;
+
+  // Check if request is authorized
+  const isAuthorized = isDevelopment || hasValidSecret || hasBypassHeader;
   
   if (!isAuthorized) {
     console.error("Unauthorized scrape attempt:", {
-      hasVercelCronHeader: !!request.headers.get("x-vercel-cron"),
+      requestId,
+      path,
       hasAuthHeader: !!authHeader,
-      hasCronSecret: !!process.env.CRON_SECRET,
+      hasCronSecret: !!secret,
+      hasBypassHeader,
+      bypassConfigured: !!bypass,
+      authHeaderLength: authHeader?.length ?? 0,
+      authHeaderValue: authHeader,
+      secretPreview: secret ? `${secret.slice(0,4)}...${secret.slice(-4)}` : null,
       nodeEnv: process.env.NODE_ENV,
     });
     return NextResponse.json({ 
       error: "Unauthorized",
-      hint: process.env.CRON_SECRET 
-        ? "Set Authorization: Bearer CRON_SECRET header" 
-        : "Set CRON_SECRET env var or use Vercel Cron"
+      hint: "Vercel automatically sends Authorization: Bearer CRON_SECRET header. Ensure CRON_SECRET is set in Vercel environment variables."
     }, { status: 401 });
   }
 
   try {
-    console.log("Starting scrape job...");
+    console.log("Starting scrape job (fast mode - AI gatekeeper skipped)...", {
+      requestId,
+      path,
+      hasAuthHeader: !!authHeader,
+      isDevelopment,
+    });
     
     const { total, results } = await scrapeAll();
     
-    // Combine all products
+    // Combine all SaaS products
     const allProducts = [
       ...results.productHunt.products,
       ...results.github.products,
@@ -78,12 +71,28 @@ export async function GET(request: NextRequest) {
       ...results.theresAnAI.products,
     ];
 
-    // Save to database with quality filtering + AI gatekeeper
-    const { created, updated, skipped, rejected, errors } = await saveScrapedProducts(allProducts);
+    // Open source tools (Hugging Face Spaces)
+    const openSourceTools =
+      (results.huggingFace?.products as ScrapedOpenSourceTool[]) || [];
+
+    // Save to database with quality filtering only (skip AI gatekeeper for fast execution)
+    // Products will have viabilityScore=null and will be assessed later by /api/assess
+    const { created, updated, skipped, rejected, errors } = await saveScrapedProducts(
+      allProducts,
+      true // skipGatekeeper=true for fast execution within Vercel timeout
+    );
+
+    const {
+      created: openCreated,
+      updated: openUpdated,
+      skipped: openSkipped,
+      errors: openErrors,
+    } = await saveOpenSourceTools(openSourceTools, true);
 
     const summary = {
-      message: "Scrape completed",
+      message: "Scrape completed (fast mode)",
       timestamp: new Date().toISOString(),
+      note: "Products saved without AI assessment. Run /api/assess to assess viability.",
       sources: {
         productHunt: {
           success: results.productHunt.success,
@@ -105,22 +114,34 @@ export async function GET(request: NextRequest) {
           count: results.theresAnAI.products.length,
           error: results.theresAnAI.error,
         },
+        huggingFace: {
+          success: results.huggingFace.success,
+          count: results.huggingFace.products.length,
+          error: results.huggingFace.error,
+        },
       },
       totals: {
         scraped: total,
         created,
         updated,
-        skipped, // Low-quality products filtered out
-        rejected, // Products rejected by AI gatekeeper (not commercial B2B SaaS)
+        skipped, // Low-quality products filtered out by rule-based quality score
+        rejected, // Products rejected (should be 0 in fast mode)
         errors,
+        openSource: {
+          scraped: openSourceTools.length,
+          created: openCreated,
+          updated: openUpdated,
+          skipped: openSkipped,
+          errors: openErrors,
+        },
       },
     };
 
-    console.log("Scrape summary:", JSON.stringify(summary, null, 2));
+    console.log("Scrape summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
     return NextResponse.json(summary);
   } catch (error) {
-    console.error("Scrape job error:", error);
+    console.error("Scrape job error:", { requestId, path, error });
     return NextResponse.json(
       {
         error: "Scrape job failed",

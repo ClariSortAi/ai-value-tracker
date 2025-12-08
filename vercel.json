@@ -9,17 +9,6 @@
       "path": "/api/score",
       "schedule": "0 8 * * 0"
     }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=60, stale-while-revalidate"
-        }
-      ]
-    }
   ]
 }
 
