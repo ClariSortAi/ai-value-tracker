@@ -282,9 +282,6 @@ export async function GET(request: NextRequest) {
 
     console.log("Assessment summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
-    const { searchParams } = new URL(request.url);
-    const jobId = searchParams.get("jobId");
-
     if (jobId) {
       await completeJob(jobId, {
         summary,
