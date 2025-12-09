@@ -3,6 +3,13 @@ import { randomUUID } from "crypto";
 import prisma from "@/lib/db";
 import { assessCommercialViability } from "@/lib/ai/gatekeeper";
 import type { Source } from "@/lib/scrapers/types";
+import {
+  startJob,
+  updateJobProgress,
+  completeJob,
+  failJob,
+  addJobActivity,
+} from "@/lib/job-tracker";
 
 // Force dynamic execution - prevent caching
 export const dynamic = 'force-dynamic';
@@ -57,11 +64,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Check for jobId in query params
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+
+    if (jobId) {
+      await startJob(jobId);
+      await addJobActivity(jobId, "Starting assessment job...", "info");
+    }
+
     console.log("Starting AI assessment job...", {
       requestId,
       path,
       hasAuthHeader: !!authHeader,
       isDevelopment,
+      jobId,
     });
 
     // Find products that haven't been assessed yet (viabilityScore is null)
@@ -87,6 +104,16 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const totalToAssess = unassessedProducts.length + unassessedOpenSource.length;
+
+    if (jobId && totalToAssess > 0) {
+      await updateJobProgress(jobId, {
+        currentStep: "Assessing products...",
+        itemsProcessed: 0,
+        itemsTotal: totalToAssess,
+      });
+    }
+
     const results = {
       assessed: 0,
       rejected: 0,
@@ -100,8 +127,18 @@ export async function GET(request: NextRequest) {
       products: [] as Array<{ name: string; status: string; reason?: string }>,
     };
 
+    let processedCount = 0;
     for (const product of unassessedProducts) {
       try {
+        if (jobId) {
+          await updateJobProgress(jobId, {
+            currentStep: "Assessing products...",
+            itemsProcessed: processedCount,
+            itemsTotal: totalToAssess,
+            currentItem: product.name,
+          });
+        }
+
         console.log(`[Assess] Evaluating: ${product.name}`);
 
         const viability = await assessCommercialViability({
@@ -148,12 +185,14 @@ export async function GET(request: NextRequest) {
           console.log(`[Assess] APPROVED: ${product.name} (confidence: ${viability.confidence})`, { requestId });
         }
 
+        processedCount++;
         // Small delay between API calls (we have 2000 RPM, but be respectful)
         await new Promise(resolve => setTimeout(resolve, 200));
 
       } catch (error) {
         console.error(`[Assess] Error assessing ${product.name}:`, error);
         results.errors++;
+        processedCount++;
         results.products.push({
           name: product.name,
           status: "error",
@@ -164,6 +203,15 @@ export async function GET(request: NextRequest) {
 
     for (const tool of unassessedOpenSource) {
       try {
+        if (jobId) {
+          await updateJobProgress(jobId, {
+            currentStep: "Assessing open source tools...",
+            itemsProcessed: processedCount,
+            itemsTotal: totalToAssess,
+            currentItem: tool.name,
+          });
+        }
+
         console.log(`[Assess][OpenSource] Evaluating: ${tool.name}`);
 
         const viability = await assessCommercialViability({
@@ -193,10 +241,12 @@ export async function GET(request: NextRequest) {
           status: "assessed",
         });
 
+        processedCount++;
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (error) {
         console.error(`[Assess][OpenSource] Error assessing ${tool.name}:`, error);
         openResults.errors++;
+        processedCount++;
         openResults.products.push({
           name: tool.name,
           status: "error",
@@ -232,14 +282,43 @@ export async function GET(request: NextRequest) {
 
     console.log("Assessment summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
-    return NextResponse.json(summary);
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+
+    if (jobId) {
+      await completeJob(jobId, {
+        summary,
+        assessed: results.assessed + openResults.assessed,
+        rejected: results.rejected,
+        errors: results.errors + openResults.errors,
+        remaining: remainingCount + remainingOpen,
+      });
+      await addJobActivity(
+        jobId,
+        `Assessment completed: ${results.assessed + openResults.assessed} assessed, ${results.rejected} rejected`,
+        "success"
+      );
+    }
+
+    return NextResponse.json({
+      ...summary,
+      ...(jobId ? { jobId } : {}),
+    });
 
   } catch (error) {
     console.error("Assessment job error:", { requestId, path, error });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+    if (jobId) {
+      await failJob(jobId, errorMessage);
+    }
+
     return NextResponse.json(
       {
         error: "Assessment job failed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message: errorMessage,
       },
       { status: 500 }
     );

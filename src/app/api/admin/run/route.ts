@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createJob } from "@/lib/job-tracker";
 
 const ACTIONS = [
   "scrape",
@@ -53,13 +54,21 @@ async function runAction(request: NextRequest) {
     );
   }
 
+  // Create job for tracking (except cleanup actions which don't need tracking)
+  let jobId: string | null = null;
+  if (["scrape", "assess", "score", "full-pipeline"].includes(action)) {
+    jobId = await createJob(
+      action as "scrape" | "assess" | "score" | "full-pipeline"
+    );
+  }
+
   const targetPath =
     action === "scrape"
-      ? "/api/scrape"
+      ? `/api/scrape${jobId ? `?jobId=${jobId}` : ""}`
       : action === "assess"
-      ? "/api/assess"
+      ? `/api/assess${jobId ? `?jobId=${jobId}` : ""}`
       : action === "score"
-      ? "/api/score"
+      ? `/api/score${jobId ? `?jobId=${jobId}` : ""}`
       : action === "cleanup-identify"
       ? "/api/admin/cleanup?action=identify"
       : action === "cleanup-remove"
@@ -83,16 +92,21 @@ async function runAction(request: NextRequest) {
 
     // For full-pipeline, orchestrate sequentially instead of single fetch
     if (action === "full-pipeline") {
-      const steps: Array<{ name: string; path: string }> = [
-        { name: "scrape", path: "/api/scrape" },
-        { name: "assess", path: "/api/assess" },
-        { name: "score", path: "/api/score" },
-        { name: "cleanup", path: "/api/admin/cleanup?action=remove" },
+      // Create child jobs for each step
+      const scrapeJobId = await createJob("scrape", { parentJobId: jobId });
+      const assessJobId = await createJob("assess", { parentJobId: jobId });
+      const scoreJobId = await createJob("score", { parentJobId: jobId });
+
+      const steps: Array<{ name: string; path: string; jobId: string | null }> = [
+        { name: "scrape", path: `/api/scrape?jobId=${scrapeJobId}`, jobId: scrapeJobId },
+        { name: "assess", path: `/api/assess?jobId=${assessJobId}`, jobId: assessJobId },
+        { name: "score", path: `/api/score?jobId=${scoreJobId}`, jobId: scoreJobId },
+        { name: "cleanup", path: "/api/admin/cleanup?action=remove", jobId: null },
       ];
 
       const results: Record<
         string,
-        { status: number; ok: boolean; data: unknown }
+        { status: number; ok: boolean; data: unknown; jobId?: string }
       > = {};
 
       for (const step of steps) {
@@ -108,7 +122,12 @@ async function runAction(request: NextRequest) {
         } catch {
           data = text || null;
         }
-        results[step.name] = { status: res.status, ok: res.ok, data };
+        results[step.name] = {
+          status: res.status,
+          ok: res.ok,
+          data,
+          ...(step.jobId ? { jobId: step.jobId } : {}),
+        };
 
         // If a step fails, stop early
         if (!res.ok) {
@@ -117,6 +136,7 @@ async function runAction(request: NextRequest) {
               action,
               ok: false,
               failedStep: step.name,
+              jobId,
               results,
             },
             { status: 500 }
@@ -131,6 +151,7 @@ async function runAction(request: NextRequest) {
         {
           action,
           ok: true,
+          jobId,
           results,
         },
         { status: 200 }
@@ -156,6 +177,7 @@ async function runAction(request: NextRequest) {
           status: res.status,
           ok: res.ok,
           data,
+          ...(jobId ? { jobId } : {}),
         },
         { status: res.ok ? 200 : res.status }
       );

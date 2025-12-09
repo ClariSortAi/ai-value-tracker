@@ -130,3 +130,28 @@ model OpenSourceScore {
   @@index([openSourceToolId])
   @@index([compositeScore])
 }
+
+model PipelineJob {
+  id          String   @id @default(cuid())
+  type        String   // 'scrape', 'assess', 'score', 'cleanup', 'full-pipeline'
+  status      String   @default("pending") // 'pending', 'running', 'completed', 'failed'
+  progress    Float    @default(0) // 0-100 percentage
+  currentStep String?  // Current step description
+  itemsProcessed Int   @default(0)
+  itemsTotal     Int?  // null if unknown
+  currentItem    String? // Name of item currently being processed
+  timeElapsed    Int   @default(0) // seconds
+  errors         Int   @default(0)
+  metadata       String @default("{}") // JSON for job-specific data
+  activityLog    String @default("[]") // JSON array of recent activity entries
+  startedAt      DateTime?
+  completedAt    DateTime?
+  errorMessage   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([type])
+}

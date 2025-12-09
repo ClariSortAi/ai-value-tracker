@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import prisma from "@/lib/db";
 import { scoreProduct, type ProductData } from "@/lib/ai";
+import {
+  startJob,
+  updateJobProgress,
+  completeJob,
+  failJob,
+  addJobActivity,
+} from "@/lib/job-tracker";
 
 // Force dynamic execution - prevent caching
 export const dynamic = 'force-dynamic';
@@ -54,11 +61,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Check for jobId in query params
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+
+    if (jobId) {
+      await startJob(jobId);
+      await addJobActivity(jobId, "Starting scoring job...", "info");
+    }
+
     console.log("Starting scoring job...", {
       requestId,
       path,
       hasAuthHeader: !!authHeader,
       isDevelopment,
+      jobId,
     });
 
     // Find products without scores
@@ -82,6 +99,16 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${productsToScore.length} products to score`, { requestId });
 
+    const totalToScore = productsToScore.length + openSourceToScore.length;
+
+    if (jobId && totalToScore > 0) {
+      await updateJobProgress(jobId, {
+        currentStep: "Scoring products...",
+        itemsProcessed: 0,
+        itemsTotal: totalToScore,
+      });
+    }
+
     const results = {
       scored: 0,
       errors: 0,
@@ -94,8 +121,19 @@ export async function GET(request: NextRequest) {
       products: [] as Array<{ name: string; score: number; confidence: number }>,
     };
 
+    let processedCount = 0;
+
     for (const product of productsToScore) {
       try {
+        if (jobId) {
+          await updateJobProgress(jobId, {
+            currentStep: "Scoring products...",
+            itemsProcessed: processedCount,
+            itemsTotal: totalToScore,
+            currentItem: product.name,
+          });
+        }
+
         const productData: ProductData = {
           name: product.name,
           tagline: product.tagline || undefined,
@@ -127,6 +165,7 @@ export async function GET(request: NextRequest) {
         });
 
         results.scored++;
+        processedCount++;
         results.products.push({
           name: product.name,
           score: scoreResult.compositeScore,
@@ -143,11 +182,21 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error(`Error scoring ${product.name}:`, error);
         results.errors++;
+        processedCount++;
       }
     }
 
     for (const tool of openSourceToScore) {
       try {
+        if (jobId) {
+          await updateJobProgress(jobId, {
+            currentStep: "Scoring open source tools...",
+            itemsProcessed: processedCount,
+            itemsTotal: totalToScore,
+            currentItem: tool.name,
+          });
+        }
+
         const productData: ProductData = {
           name: tool.name,
           tagline: tool.tagline || undefined,
@@ -178,6 +227,7 @@ export async function GET(request: NextRequest) {
         });
 
         openResults.scored++;
+        processedCount++;
         openResults.products.push({
           name: tool.name,
           score: scoreResult.compositeScore,
@@ -193,6 +243,7 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error(`[OpenSource] Error scoring ${tool.name}:`, error);
         openResults.errors++;
+        processedCount++;
       }
     }
 
@@ -205,13 +256,37 @@ export async function GET(request: NextRequest) {
 
     console.log("Scoring summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
-    return NextResponse.json(summary);
+    if (jobId) {
+      await completeJob(jobId, {
+        summary,
+        scored: results.scored + openResults.scored,
+        errors: results.errors + openResults.errors,
+      });
+      await addJobActivity(
+        jobId,
+        `Scoring completed: ${results.scored + openResults.scored} scored`,
+        "success"
+      );
+    }
+
+    return NextResponse.json({
+      ...summary,
+      ...(jobId ? { jobId } : {}),
+    });
   } catch (error) {
     console.error("Scoring job error:", { requestId, path, error });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+    if (jobId) {
+      await failJob(jobId, errorMessage);
+    }
+
     return NextResponse.json(
       {
         error: "Scoring job failed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message: errorMessage,
       },
       { status: 500 }
     );

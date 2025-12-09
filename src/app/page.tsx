@@ -5,6 +5,7 @@ import { Search, Play, CheckCircle2, AlertTriangle } from "lucide-react";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
 import { OpenSourceCard } from "@/components/open-source-card";
+import { PipelineStatusPanel } from "@/components/pipeline-status-panel";
 
 interface Product {
   id: string;
@@ -53,6 +54,7 @@ export default function DiscoverPage() {
   }>({ scrape: "idle", assess: "idle", score: "idle", cleanup: "idle" });
   const [runMessage, setRunMessage] = useState<string>("");
   const [cleanupResult, setCleanupResult] = useState<string>("");
+  const [activeJobIds, setActiveJobIds] = useState<string[]>([]);
 
   const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
     setLoading(true);
@@ -139,6 +141,23 @@ export default function DiscoverPage() {
         setRunStatus((prev) => ({ ...prev, [key]: "error" }));
         setRunMessage(`Failed to run ${action}: ${data?.message || data?.error || res.status}`);
       } else {
+        // Capture jobId if present
+        if (data.jobId) {
+          setActiveJobIds((prev) => [...prev, data.jobId]);
+        }
+        // For full-pipeline, capture all child jobIds
+        if (data.results) {
+          const childJobIds: string[] = [];
+          Object.values(data.results).forEach((result: any) => {
+            if (result.jobId) {
+              childJobIds.push(result.jobId);
+            }
+          });
+          if (childJobIds.length > 0) {
+            setActiveJobIds((prev) => [...prev, ...childJobIds]);
+          }
+        }
+
         setRunStatus((prev) => ({ ...prev, [key]: "success" }));
         setRunMessage(`${action} completed`);
         if (key === "cleanup") {
@@ -225,6 +244,22 @@ export default function DiscoverPage() {
                 <StatusBadge label="Score" status={runStatus.score} />
               </div>
             </div>
+
+            {/* Real-time Job Status Panel */}
+            {activeJobIds.length > 0 && (
+              <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-sm">
+                <h2 className="text-lg font-semibold mb-4">Pipeline Status</h2>
+                <PipelineStatusPanel
+                  jobIds={activeJobIds}
+                  onJobComplete={(jobId) => {
+                    // Optionally remove completed jobs after a delay
+                    setTimeout(() => {
+                      setActiveJobIds((prev) => prev.filter((id) => id !== jobId));
+                    }, 10000); // Remove after 10 seconds
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </section>

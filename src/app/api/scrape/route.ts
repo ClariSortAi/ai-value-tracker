@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { scrapeAll, saveOpenSourceTools, saveScrapedProducts } from "@/lib/scrapers";
 import type { ScrapedOpenSourceTool } from "@/lib/scrapers/types";
+import {
+  createJob,
+  startJob,
+  updateJobProgress,
+  completeJob,
+  failJob,
+  addJobActivity,
+} from "@/lib/job-tracker";
 
 // Force dynamic execution - prevent caching
 export const dynamic = 'force-dynamic';
@@ -54,14 +62,47 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Check for jobId in query params
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+
+    let jobIdValue: string | null = null;
+    if (jobId) {
+      jobIdValue = jobId;
+      await startJob(jobId);
+      await addJobActivity(jobId, "Starting scrape job...", "info");
+    }
+
     console.log("Starting scrape job (fast mode - AI gatekeeper skipped)...", {
       requestId,
       path,
       hasAuthHeader: !!authHeader,
       isDevelopment,
+      jobId: jobIdValue,
     });
+
+    if (jobIdValue) {
+      await updateJobProgress(jobIdValue, {
+        currentStep: "Scraping sources...",
+        itemsProcessed: 0,
+        itemsTotal: undefined,
+      });
+    }
     
     const { total, results } = await scrapeAll();
+    
+    if (jobIdValue) {
+      await updateJobProgress(jobIdValue, {
+        currentStep: "Processing scraped data...",
+        itemsProcessed: total,
+        itemsTotal: total,
+      });
+      await addJobActivity(
+        jobIdValue,
+        `Scraped ${total} items from all sources`,
+        "success"
+      );
+    }
     
     // Combine all SaaS products
     const allProducts = [
@@ -74,6 +115,14 @@ export async function GET(request: NextRequest) {
     // Open source tools (Hugging Face Spaces)
     const openSourceTools =
       (results.huggingFace?.products as ScrapedOpenSourceTool[]) || [];
+
+    if (jobIdValue) {
+      await updateJobProgress(jobIdValue, {
+        currentStep: "Saving products to database...",
+        itemsProcessed: allProducts.length + openSourceTools.length,
+        itemsTotal: total,
+      });
+    }
 
     // Save to database with quality filtering only (skip AI gatekeeper for fast execution)
     // Products will have viabilityScore=null and will be assessed later by /api/assess
@@ -139,13 +188,50 @@ export async function GET(request: NextRequest) {
 
     console.log("Scrape summary:", JSON.stringify({ requestId, ...summary }, null, 2));
 
-    return NextResponse.json(summary);
+    if (jobIdValue) {
+      await completeJob(jobIdValue, {
+        summary,
+        totals: {
+          scraped: total,
+          created,
+          updated,
+          skipped,
+          rejected,
+          errors,
+          openSource: {
+            scraped: openSourceTools.length,
+            created: openCreated,
+            updated: openUpdated,
+            skipped: openSkipped,
+            errors: openErrors,
+          },
+        },
+      });
+      await addJobActivity(
+        jobIdValue,
+        `Scrape completed: ${created} created, ${updated} updated`,
+        "success"
+      );
+    }
+
+    return NextResponse.json({
+      ...summary,
+      ...(jobIdValue ? { jobId: jobIdValue } : {}),
+    });
   } catch (error) {
     console.error("Scrape job error:", { requestId, path, error });
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    
+    const { searchParams } = new URL(request.url);
+    const jobId = searchParams.get("jobId");
+    if (jobId) {
+      await failJob(jobId, errorMessage);
+    }
+
     return NextResponse.json(
       {
         error: "Scrape job failed",
-        message: error instanceof Error ? error.message : "Unknown error",
+        message: errorMessage,
       },
       { status: 500 }
     );
