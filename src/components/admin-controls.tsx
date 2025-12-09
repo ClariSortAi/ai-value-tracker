@@ -28,6 +28,7 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
     scrape: ActionStatus;
     assess: ActionStatus;
     score: ActionStatus;
+    enrich: ActionStatus;
     "cleanup-identify": ActionStatus;
     "cleanup-remove": ActionStatus;
     "cleanup-prune": ActionStatus;
@@ -35,6 +36,7 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
     scrape: "idle",
     assess: "idle",
     score: "idle",
+    enrich: "idle",
     "cleanup-identify": "idle",
     "cleanup-remove": "idle",
     "cleanup-prune": "idle",
@@ -46,6 +48,7 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
       | "scrape"
       | "assess"
       | "score"
+      | "enrich"
       | "cleanup-identify"
       | "cleanup-remove"
       | "cleanup-prune"
@@ -128,6 +131,7 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
 
   const disableAssess = runStatus.scrape !== "success";
   const disableScore = runStatus.assess !== "success";
+  const disableEnrich = runStatus.score !== "success";
 
   return (
     <div className="w-full">
@@ -157,9 +161,9 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
             </h4>
             <p className="text-xs text-[var(--foreground-subtle)] mb-3">
               Run in order: Scrape gathers data, Assess filters quality, Score
-              ranks products.
+              ranks, Enrich adds detail.
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               <button
                 onClick={() => runAction("scrape")}
                 disabled={runStatus.scrape === "running"}
@@ -189,6 +193,16 @@ export function AdminControls({ onJobsUpdate }: AdminControlsProps) {
                   <RefreshCw className="w-3.5 h-3.5" />
                 )}
                 Score
+              </button>
+              <button
+                onClick={() => runAction("enrich")}
+                disabled={runStatus.enrich === "running" || disableEnrich}
+                className="btn btn-secondary btn-sm"
+              >
+                {getStatusIcon(runStatus.enrich) || (
+                  <RefreshCw className="w-3.5 h-3.5" />
+                )}
+                Enrich
               </button>
             </div>
           </div>

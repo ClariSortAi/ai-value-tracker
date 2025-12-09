@@ -35,6 +35,14 @@ model Product {
   targetAudience String? // 'b2b', 'b2c', 'developer', 'unknown'
   productType    String? // 'saas', 'library', 'framework', 'game', 'tutorial', 'other'
 
+  // AI-Enriched product data (Track B enhancement)
+  extendedDescription String?  // AI-generated 2-3 paragraph description
+  keyFeatures         String   @default("[]") // JSON array of key features
+  useCases            String   @default("[]") // JSON array of use cases
+  limitations         String   @default("[]") // JSON array of limitations
+  bestFor             String   @default("[]") // JSON array of ideal user personas
+  enrichedAt          DateTime? // When enrichment was last run
+
   scores Score[]
   // rawData removed to save storage (free tier: 0.5GB limit)
 
@@ -46,6 +54,7 @@ model Product {
   @@index([category])
   @@index([targetAudience])
   @@index([productType])
+  @@index([enrichedAt])
 }
 
 model Score {
@@ -97,6 +106,14 @@ model OpenSourceTool {
   targetAudience String?
   productType    String?
 
+  // AI-Enriched product data (Track B enhancement - parity with Product)
+  extendedDescription String?  // AI-generated 2-3 paragraph description
+  keyFeatures         String   @default("[]") // JSON array of key features
+  useCases            String   @default("[]") // JSON array of use cases
+  limitations         String   @default("[]") // JSON array of limitations
+  bestFor             String   @default("[]") // JSON array of ideal user personas
+  enrichedAt          DateTime? // When enrichment was last run
+
   scores OpenSourceScore[]
 
   createdAt DateTime @default(now())
@@ -106,6 +123,7 @@ model OpenSourceTool {
   @@index([launchDate])
   @@index([author])
   @@index([viabilityScore])
+  @@index([enrichedAt])
 }
 
 model OpenSourceScore {

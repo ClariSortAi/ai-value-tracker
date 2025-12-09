@@ -1,7 +1,7 @@
 import prisma from "@/lib/db";
 import { randomUUID } from "crypto";
 
-export type JobType = "scrape" | "assess" | "score" | "cleanup" | "full-pipeline";
+export type JobType = "scrape" | "assess" | "score" | "enrich" | "cleanup" | "full-pipeline";
 export type JobStatus = "pending" | "running" | "completed" | "failed";
 
 export interface JobProgress {

@@ -5,6 +5,7 @@ const ACTIONS = [
   "scrape",
   "assess",
   "score",
+  "enrich",
   "cleanup-identify",
   "cleanup-remove",
   "cleanup-prune",
@@ -56,9 +57,9 @@ async function runAction(request: NextRequest) {
 
   // Create job for tracking (except cleanup actions which don't need tracking)
   let jobId: string | null = null;
-  if (["scrape", "assess", "score", "full-pipeline"].includes(action)) {
+  if (["scrape", "assess", "score", "enrich", "full-pipeline"].includes(action)) {
     jobId = await createJob(
-      action as "scrape" | "assess" | "score" | "full-pipeline"
+      action as "scrape" | "assess" | "score" | "enrich" | "full-pipeline"
     );
   }
 
@@ -69,6 +70,8 @@ async function runAction(request: NextRequest) {
       ? `/api/assess${jobId ? `?jobId=${jobId}` : ""}`
       : action === "score"
       ? `/api/score${jobId ? `?jobId=${jobId}` : ""}`
+      : action === "enrich"
+      ? `/api/enrich${jobId ? `?jobId=${jobId}` : ""}`
       : action === "cleanup-identify"
       ? "/api/admin/cleanup?action=identify"
       : action === "cleanup-remove"
@@ -96,11 +99,13 @@ async function runAction(request: NextRequest) {
       const scrapeJobId = await createJob("scrape", { parentJobId: jobId });
       const assessJobId = await createJob("assess", { parentJobId: jobId });
       const scoreJobId = await createJob("score", { parentJobId: jobId });
+      const enrichJobId = await createJob("enrich", { parentJobId: jobId });
 
       const steps: Array<{ name: string; path: string; jobId: string | null }> = [
         { name: "scrape", path: `/api/scrape?jobId=${scrapeJobId}`, jobId: scrapeJobId },
         { name: "assess", path: `/api/assess?jobId=${assessJobId}`, jobId: assessJobId },
         { name: "score", path: `/api/score?jobId=${scoreJobId}`, jobId: scoreJobId },
+        { name: "enrich", path: `/api/enrich?jobId=${enrichJobId}`, jobId: enrichJobId },
         { name: "cleanup", path: "/api/admin/cleanup?action=remove", jobId: null },
       ];
 

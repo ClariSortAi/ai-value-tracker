@@ -25,11 +25,15 @@ export async function GET(
       );
     }
 
-    // Transform for API response
+    // Transform for API response - parse JSON fields including enriched data
     const response = {
       ...product,
       tags: JSON.parse(product.tags || "[]"),
       targetRoles: JSON.parse(product.targetRoles || "[]"),
+      keyFeatures: JSON.parse(product.keyFeatures || "[]"),
+      useCases: JSON.parse(product.useCases || "[]"),
+      limitations: JSON.parse(product.limitations || "[]"),
+      bestFor: JSON.parse(product.bestFor || "[]"),
       scores: product.scores,
     };
 

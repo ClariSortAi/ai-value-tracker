@@ -34,6 +34,13 @@ interface Product {
   comments?: number | null;
   stars?: number | null;
   scores: Score[];
+  // Enriched data
+  extendedDescription?: string | null;
+  keyFeatures?: string[];
+  useCases?: string[];
+  limitations?: string[];
+  bestFor?: string[];
+  enrichedAt?: string | null;
 }
 
 const SCORE_LABELS: Record<string, string> = {
@@ -144,11 +151,16 @@ export default function ProductDetailPage() {
   const showFallback = !product.logo || imageError;
   const roles = product.targetRoles || [];
 
-  const useCases = (product.description || product.tagline || "")
-    .split(".")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 3);
+  // Use enriched data if available, otherwise fallback to basic parsing
+  const hasEnrichedData = !!product.extendedDescription || (product.keyFeatures && product.keyFeatures.length > 0);
+  
+  const displayUseCases = product.useCases && product.useCases.length > 0
+    ? product.useCases
+    : (product.description || product.tagline || "")
+        .split(".")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 3);
 
   const signals = [
     product.upvotes ? { label: "Upvotes", value: product.upvotes } : null,
@@ -239,31 +251,81 @@ export default function ProductDetailPage() {
 
         {/* Main Content */}
         <div className="grid lg:grid-cols-3 gap-10">
-          {/* Left: Description + Use cases + CTA */}
+          {/* Left: Description + Key Features + Use cases + Best For + CTA */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Description */}
-            {product.description && (
+            {/* About - Use enriched description if available */}
+            {(product.extendedDescription || product.description) && (
               <section className="card p-6">
                 <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
                   About
                 </h2>
-                <p className="text-[var(--foreground-muted)] leading-relaxed text-lg">
-                  {product.description}
-                </p>
+                <div className="text-[var(--foreground-muted)] leading-relaxed text-lg whitespace-pre-line">
+                  {product.extendedDescription || product.description}
+                </div>
               </section>
             )}
 
-            {/* Use cases */}
-            {useCases.length > 0 && (
+            {/* Key Features - only show if enriched */}
+            {product.keyFeatures && product.keyFeatures.length > 0 && (
               <section className="card p-6">
-                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-3">
-                  Why it matters
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
+                  Key Features
                 </h2>
-                <ul className="space-y-2 text-[var(--foreground-muted)]">
-                  {useCases.map((uc, idx) => (
-                    <li key={idx} className="flex gap-2">
+                <ul className="grid sm:grid-cols-2 gap-3">
+                  {product.keyFeatures.map((feature, idx) => (
+                    <li key={idx} className="flex gap-3 text-[var(--foreground-muted)]">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Use Cases / Why it matters */}
+            {displayUseCases.length > 0 && (
+              <section className="card p-6">
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
+                  {hasEnrichedData ? "Use Cases" : "Why it matters"}
+                </h2>
+                <ul className="space-y-3 text-[var(--foreground-muted)]">
+                  {displayUseCases.map((uc, idx) => (
+                    <li key={idx} className="flex gap-3">
                       <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[var(--foreground-subtle)] flex-shrink-0" />
                       <span>{uc}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/* Best For - only show if enriched */}
+            {product.bestFor && product.bestFor.length > 0 && (
+              <section className="card p-6">
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
+                  Best For
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {product.bestFor.map((persona, idx) => (
+                    <span key={idx} className="tag tag-accent">
+                      {persona}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Limitations - only show if enriched and has content */}
+            {product.limitations && product.limitations.length > 0 && (
+              <section className="card p-6 border-amber-200 bg-amber-50/30">
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-4">
+                  Considerations
+                </h2>
+                <ul className="space-y-2 text-[var(--foreground-muted)]">
+                  {product.limitations.map((limitation, idx) => (
+                    <li key={idx} className="flex gap-3">
+                      <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                      <span>{limitation}</span>
                     </li>
                   ))}
                 </ul>

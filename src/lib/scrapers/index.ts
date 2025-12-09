@@ -23,8 +23,12 @@ export type { ScraperResult, ScrapedOpenSourceTool, ScrapedProduct };
 
 // Storage limits for free tier (0.5GB Neon)
 const MAX_PRODUCTS = 1000;
-const MIN_QUALITY_SCORE = 60; // Increased from 50 - stricter quality bar to filter low-engagement products
-const MIN_OPEN_SOURCE_QUALITY = 30; // Increased from 20 - ensure open source tools have meaningful engagement
+const MIN_QUALITY_SCORE = 70; // Increased from 60 - stricter quality bar for commercial products
+const MIN_OPEN_SOURCE_QUALITY = 40; // Increased from 30 - ensure open source tools have meaningful engagement
+
+// Minimum engagement thresholds - products with no engagement signals are likely noise
+const MIN_UPVOTES = 10; // Require at least some community validation
+const MIN_STARS = 50; // GitHub projects need meaningful star count
 
 // Calculate quality score based on engagement signals
 function calculateQualityScore(product: ScrapedProduct): number {
@@ -83,7 +87,52 @@ const EXCLUDED_DOMAINS = [
   'notion.site', 'notion.so', // Notion pages (often personal projects)
   'reddit.com', 'discord.gg', 'discord.com', // Community platforms
   'kaggle.com', // Dataset/competition platform
+  // Educational platforms (NEW)
+  'udemy.com', 'coursera.org', 'edx.org', 'skillshare.com', 'pluralsight.com',
+  'codecademy.com', 'freecodecamp.org', 'khanacademy.org',
+  // Indian exam/educational portals (NEW - catches NeoPass-type products)
+  'nptel.ac.in', 'swayam.gov.in', 'iamneo.ai', 'neolearn.in',
+  'unacademy.com', 'byjus.com', 'vedantu.com', 'toppr.com',
+  // Student/quiz platforms (NEW)
+  'quizlet.com', 'kahoot.com', 'socrative.com', 'mentimeter.com',
 ];
+
+// Keywords that indicate non-commercial/off-mission products
+const REJECTION_KEYWORDS = [
+  // Exam prep and student tools
+  'exam', 'exams', 'test prep', 'quiz', 'quizzes', 'mock test', 'mock tests',
+  'certification prep', 'study guide', 'flashcard', 'flashcards',
+  'student', 'students', 'homework', 'assignment', 'assignments',
+  'coursework', 'semester', 'grading', 'grades', 'gpa',
+  // Specific exam systems
+  'nptel', 'jee', 'neet', 'sat prep', 'gre prep', 'gmat prep', 'toefl', 'ielts',
+  'upsc', 'gate exam', 'cat exam', 'clat', 'iit jee',
+  // Educational focus
+  'school', 'college', 'university', 'academic', 'campus',
+  'syllabus', 'curriculum', 'lecture', 'classroom',
+  // Tutorials and courses
+  'tutorial', 'tutorials', 'course', 'courses', 'bootcamp', 'workshop',
+  'learn to', 'learning platform', 'educational',
+  // Personal/hobby projects
+  'portfolio', 'personal project', 'side project', 'hobby project',
+  'weekend project', 'i built', 'i made', 'i created', 'my first',
+  // Games
+  'game', 'games', 'gaming', 'gameplay', 'player', 'players',
+  'level', 'levels', 'score', 'scores', 'leaderboard',
+];
+
+// Check if product name/description contains rejection keywords
+function hasRejectionKeywords(product: ScrapedProduct): { rejected: boolean; reason?: string } {
+  const text = `${product.name} ${product.tagline || ""} ${product.description || ""}`.toLowerCase();
+  
+  for (const keyword of REJECTION_KEYWORDS) {
+    if (text.includes(keyword.toLowerCase())) {
+      return { rejected: true, reason: `Contains keyword: "${keyword}"` };
+    }
+  }
+  
+  return { rejected: false };
+}
 
 // Check if website is from an excluded domain
 function isExcludedDomain(website: string | undefined): boolean {
@@ -245,6 +294,17 @@ export async function saveScrapedProducts(
 
   for (const { product, quality } of sortedProducts) {
     try {
+      // LAYER 0: Minimum engagement filter - skip products with zero signals
+      const hasUpvotes = (product.upvotes || 0) >= MIN_UPVOTES;
+      const hasStars = (product.stars || 0) >= MIN_STARS;
+      const hasAnyEngagement = hasUpvotes || hasStars || (product.comments || 0) >= 5;
+      
+      if (!hasAnyEngagement) {
+        // Only log for debug, these are very common
+        skipped++;
+        continue;
+      }
+
       // LAYER 1: Quality score filter (always active)
       if (quality < MIN_QUALITY_SCORE) {
         skipped++;
@@ -254,6 +314,14 @@ export async function saveScrapedProducts(
       // LAYER 1.5: Exclude products from non-commercial domains
       if (isExcludedDomain(product.website)) {
         console.log(`[Scraper] Skipped: ${product.name} (excluded domain: ${product.website})`);
+        skipped++;
+        continue;
+      }
+
+      // LAYER 1.6: Check for rejection keywords (exam, student, game, etc.)
+      const keywordCheck = hasRejectionKeywords(product);
+      if (keywordCheck.rejected) {
+        console.log(`[Scraper] Skipped: ${product.name} (${keywordCheck.reason})`);
         skipped++;
         continue;
       }
@@ -438,6 +506,13 @@ export async function saveOpenSourceTools(
 
   for (const { tool, quality } of sorted) {
     try {
+      // Minimum engagement filter for open source - need at least some likes or downloads
+      const hasEngagement = (tool.likes || 0) >= 20 || (tool.downloads || 0) >= 1000;
+      if (!hasEngagement) {
+        skipped++;
+        continue;
+      }
+
       if (quality < MIN_OPEN_SOURCE_QUALITY) {
         skipped++;
         continue;
@@ -617,19 +692,37 @@ export async function identifyLowQualityProducts(): Promise<{
     });
 
     // Check for game patterns
-    if (/\b(game|gaming|tower defense|arcade|puzzle|rpg|play|player|gameplay|level)\b/i.test(text)) {
+    if (/\b(game|gaming|tower defense|arcade|puzzle|rpg|play|player|gameplay|level|score|leaderboard)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be a game", quality });
       continue;
     }
 
+    // Check for exam prep / student tool patterns (NEW)
+    if (/\b(exam|exams|test prep|quiz|quizzes|mock test|certification prep|study guide|flashcard)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be exam prep tool", quality });
+      continue;
+    }
+
+    // Check for student-focused patterns (NEW)
+    if (/\b(student|students|homework|assignment|coursework|semester|grading|grades|gpa)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be a student tool", quality });
+      continue;
+    }
+
+    // Check for specific exam systems (NEW - catches NeoPass)
+    if (/\b(nptel|jee|neet|sat prep|gre prep|gmat|toefl|ielts|upsc|gate exam|cat exam|iit)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be educational/exam platform", quality });
+      continue;
+    }
+
     // Check for tutorial/educational patterns
-    if (/\b(tutorial|course|learn|education|teach)\b/i.test(text)) {
+    if (/\b(tutorial|course|bootcamp|workshop|learn to|learning platform|educational|school|college|university)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be educational content", quality });
       continue;
     }
 
     // Check for hobby project patterns
-    if (/\b(i built|i made|i coded|weekend project|side project)\b/i.test(text)) {
+    if (/\b(i built|i made|i coded|weekend project|side project|hobby project|personal project|portfolio)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be a hobby project", quality });
       continue;
     }
@@ -646,8 +739,8 @@ export async function identifyLowQualityProducts(): Promise<{
       continue;
     }
 
-    // Check for rejected product types
-    if (product.productType && ['game', 'tutorial', 'other'].includes(product.productType) && product.targetAudience !== 'b2b' && product.targetAudience !== 'developer') {
+    // Check for rejected product types (including new exam_prep and student_tool types)
+    if (product.productType && ['game', 'tutorial', 'exam_prep', 'student_tool', 'other'].includes(product.productType) && product.targetAudience !== 'b2b' && product.targetAudience !== 'developer') {
       lowQuality.push({ id: product.id, name: product.name, reason: `Product type: ${product.productType}, audience: ${product.targetAudience}`, quality });
       continue;
     }
