@@ -728,26 +728,111 @@ export async function identifyLowQualityProducts(): Promise<{
     }
 
     // Check for LLM infrastructure / open-source tools (NOT commercial products)
-    if (/\b(llm.inference|model.serving|inference.engine|self.hosted|local.ai|local.llm)\b/i.test(text)) {
+    if (/\b(llm.inference|model.serving|inference.engine|self.hosted|local.ai|local.llm|desktop.client|desktop.app)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "LLM infrastructure, not commercial product", quality });
       continue;
     }
 
-    // Check for specific open-source LLM tools
-    if (/\b(ollama|llama\.cpp|vllm|gguf|ggml|text-generation)\b/i.test(text)) {
+    // Check for specific open-source LLM tools (comprehensive list)
+    if (/\b(ollama|llama\.cpp|vllm|gguf|ggml|text-generation|lobe.chat|nextchat|chatbox|cherry.studio|anything.llm)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "Open-source LLM tool", quality });
       continue;
     }
 
-    // Check for chat UI wrappers (not original products)
-    if (/\b(webui|web.ui|chat.ui|frontend.for|interface.for|client.for|chat.client)\b/i.test(text)) {
-      lowQuality.push({ id: product.id, name: product.name, reason: "UI wrapper, not original product", quality });
+    // Check for chat UI wrappers and clients (not original products)
+    if (/\b(webui|web.ui|chat.ui|frontend.for|interface.for|client.for|chat.client|ai.client|ai.assistant|chat.assistant)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "UI wrapper/client, not original product", quality });
       continue;
     }
 
-    // Check for RAG/LLM frameworks (libraries, not products)
-    if (/\b(rag.framework|rag.pipeline|vector.store|langchain|llamaindex|retrieval.augmented)\b/i.test(text)) {
+    // Check for AI agent/automation frameworks (developer tools, not B2B SaaS)
+    if (/\b(ai.agent|ai.agents|browser.automation|web.automation|build.agents|agent.framework|openhands|browser.use)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "AI agent framework, not commercial product", quality });
+      continue;
+    }
+
+    // Check for RAG/LLM frameworks and templates (libraries, not products)
+    if (/\b(rag.framework|rag.pipeline|rag.engine|vector.store|langchain|llamaindex|retrieval.augmented|cloud.template|ai.pipeline|ready.to.run)\b/i.test(text)) {
       lowQuality.push({ id: product.id, name: product.name, reason: "RAG/LLM framework, not commercial product", quality });
+      continue;
+    }
+
+    // Check for visual flow builders (developer tools)
+    if (/\b(build.+visually|visual.builder|drag.and.drop|no.code.ai|flow.builder|flowise|dify)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Visual AI builder, developer tool", quality });
+      continue;
+    }
+
+    // Check for developer infrastructure and frameworks
+    if (/\b(sdk|framework|cli.tool|microservice|infrastructure|server.panel|unified.stack|web.interface)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Developer infrastructure/framework", quality });
+      continue;
+    }
+
+    // Check for bot frameworks and wrappers
+    if (/\b(telegram.bot|bot.framework|chatbot.maker|rpa.sdk|wrapper|conversational.rpa)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Bot framework/wrapper", quality });
+      continue;
+    }
+
+    // Check for hardware/IoT projects
+    if (/\b(esp32|arduino|raspberry.pi|iot|hardware|embedded)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Hardware/IoT project", quality });
+      continue;
+    }
+
+    // Check for open-source CLI tools and developer utilities
+    if (/\b(open.source.cli|cli.tool|command.line|packs.your|repository.packing|code.packing)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "CLI/Developer utility", quality });
+      continue;
+    }
+
+    // Check for notebooks and data science tools (developer-focused)
+    if (/\b(notebook|jupyter|python.notebook|reactive.notebook|data.science.tool)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Data science/notebook tool", quality });
+      continue;
+    }
+
+    // Check for app builders that are free/local/open-source (not commercial)
+    if (/\b(free.+local|local.+open.source|free.+open.source|app.builder.+free|free.+app.builder)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Free/local app builder, not commercial", quality });
+      continue;
+    }
+
+    // Check for autonomous agents frameworks (developer tools)
+    if (/\b(autonomous.agent|swe.agent|github.issue|code.agent|eliza|agent.for.everyone)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Autonomous agent framework", quality });
+      continue;
+    }
+
+    // Check for specific tool names that should be excluded
+    const toolName = product.name.toLowerCase();
+    if (['continue', 'repomix', 'dyad', 'marimo', 'eliza', 'maxkb', 'taipy', 'dvc', 'nocobase', 'leon', 'amplication'].includes(toolName)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Known developer/open-source tool", quality });
+      continue;
+    }
+
+    // Check for chat wrappers and multi-chat tools
+    if (/\b(chatall|chat.all|concurrently.chat|multiple.llms|gui.for.chatgpt|chatgpt.gui|chuanhu)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Chat wrapper/multi-chat tool", quality });
+      continue;
+    }
+
+    // Check for IM/messaging servers (infrastructure)
+    if (/\b(im.server|im.chat|messaging.server|chat.server|open.im)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "IM/Chat server infrastructure", quality });
+      continue;
+    }
+
+    // Check for developer communities and networks (not B2B SaaS)
+    if (/\b(developer.network|professional.network.for.developer|dev.community|daily\.dev)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Developer community/network", quality });
+      continue;
+    }
+
+    // Check for open-source personal assistants (not commercial)
+    if (/\b(open.source.personal.assistant|personal.assistant.open|your.open.source)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Open-source personal assistant", quality });
       continue;
     }
 
