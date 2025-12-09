@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, XCircle, Loader2, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, Loader2, Clock, AlertCircle, Timer } from "lucide-react";
 
 export interface JobStatus {
   id: string;
@@ -32,13 +32,13 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
   const getStatusIcon = () => {
     switch (job.status) {
       case "completed":
-        return <CheckCircle2 className="w-5 h-5 text-green-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-green-600" />;
       case "failed":
-        return <XCircle className="w-5 h-5 text-red-500" />;
+        return <XCircle className="w-4 h-4 text-red-500" />;
       case "running":
-        return <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />;
+        return <Loader2 className="w-4 h-4 text-[var(--accent)] animate-spin" />;
       default:
-        return <Clock className="w-5 h-5 text-gray-400" />;
+        return <Clock className="w-4 h-4 text-[var(--foreground-subtle)]" />;
     }
   };
 
@@ -49,9 +49,9 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
       case "failed":
         return "border-red-200 bg-red-50";
       case "running":
-        return "border-blue-200 bg-blue-50";
+        return "border-[var(--accent)]/30 bg-[var(--accent-light)]";
       default:
-        return "border-gray-200 bg-gray-50";
+        return "border-[var(--card-border)] bg-[var(--background-secondary)]";
     }
   };
 
@@ -71,22 +71,22 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
 
   return (
     <div
-      className={`rounded-lg border-2 p-4 transition-all ${getStatusColor()}`}
+      className={`rounded-lg border p-4 transition-all ${getStatusColor()}`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           {getStatusIcon()}
           <div>
-            <h3 className="font-semibold text-sm">{formatType(job.type)}</h3>
-            <p className="text-xs text-gray-600 capitalize">{job.status}</p>
+            <h3 className="font-semibold text-sm text-[var(--foreground)]">{formatType(job.type)}</h3>
+            <p className="text-xs text-[var(--foreground-muted)] capitalize">{job.status}</p>
           </div>
         </div>
         {onDismiss && job.status !== "running" && (
           <button
             onClick={onDismiss}
-            className="text-gray-400 hover:text-gray-600 text-sm"
+            className="text-[var(--foreground-subtle)] hover:text-[var(--foreground)] text-sm p-1 rounded hover:bg-[var(--background-tertiary)]"
           >
-            ×
+            <XCircle className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -95,16 +95,16 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
       {job.status === "running" && (
         <div className="mb-3">
           <div className="flex items-center justify-between text-xs mb-1">
-            <span className="text-gray-600">
+            <span className="text-[var(--foreground-muted)]">
               {job.itemsTotal
                 ? `${job.itemsProcessed} / ${job.itemsTotal}`
                 : `${job.itemsProcessed} items`}
             </span>
-            <span className="text-gray-600">{Math.round(job.progress)}%</span>
+            <span className="text-[var(--foreground-muted)]">{Math.round(job.progress)}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div className="w-full bg-[var(--background-tertiary)] rounded-full h-1.5 overflow-hidden">
             <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              className="bg-[var(--accent)] h-1.5 rounded-full transition-all duration-300"
               style={{ width: `${job.progress}%` }}
             />
           </div>
@@ -113,23 +113,29 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
 
       {/* Current Step */}
       {job.currentStep && (
-        <p className="text-sm text-gray-700 mb-2">{job.currentStep}</p>
+        <p className="text-sm text-[var(--foreground-muted)] mb-2">{job.currentStep}</p>
       )}
 
       {/* Current Item */}
       {job.currentItem && job.status === "running" && (
-        <p className="text-xs text-gray-600 mb-2 italic">
+        <p className="text-xs text-[var(--foreground-subtle)] mb-2 truncate">
           Processing: {job.currentItem}
         </p>
       )}
 
       {/* Stats */}
-      <div className="flex items-center gap-4 text-xs text-gray-600">
+      <div className="flex items-center gap-4 text-xs text-[var(--foreground-subtle)]">
         {job.startedAt && (
-          <span>⏱️ {formatTime(job.timeElapsed)}</span>
+          <span className="flex items-center gap-1">
+            <Timer className="w-3 h-3" />
+            {formatTime(job.timeElapsed)}
+          </span>
         )}
         {job.errors > 0 && (
-          <span className="text-red-600">⚠️ {job.errors} errors</span>
+          <span className="flex items-center gap-1 text-red-600">
+            <AlertCircle className="w-3 h-3" />
+            {job.errors} errors
+          </span>
         )}
       </div>
 
@@ -142,8 +148,8 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
 
       {/* Activity Log (last 3 entries) */}
       {job.activityLog && job.activityLog.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-200">
-          <p className="text-xs font-semibold text-gray-600 mb-1">
+        <div className="mt-3 pt-3 border-t border-[var(--card-border)]">
+          <p className="text-xs font-medium text-[var(--foreground-muted)] mb-1">
             Recent Activity:
           </p>
           <div className="space-y-1">
@@ -155,7 +161,7 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
                     ? "text-red-600"
                     : entry.type === "success"
                     ? "text-green-600"
-                    : "text-gray-600"
+                    : "text-[var(--foreground-subtle)]"
                 }`}
               >
                 {entry.message}
@@ -167,4 +173,3 @@ export function JobStatusCard({ job, onDismiss }: JobStatusCardProps) {
     </div>
   );
 }
-

@@ -1,23 +1,29 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Play, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Search, Sparkles, TrendingUp, RefreshCw, Database } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
 import { OpenSourceCard } from "@/components/open-source-card";
-import { PipelineStatusPanel } from "@/components/pipeline-status-panel";
+import { AdminControls } from "@/components/admin-controls";
+import { FadeIn } from "@/components/ui/fade-in";
+import { FeaturedCard } from "@/components/featured-card";
 
 interface Product {
   id: string;
   name: string;
   slug: string;
   tagline: string | null;
+  description?: string | null;
   logo: string | null;
   category: string | null;
   tags: string[];
   targetRoles: string[];
   launchDate: string;
   source?: string | null;
+  upvotes?: number;
+  stars?: number;
   scores: { compositeScore: number }[];
 }
 
@@ -41,20 +47,14 @@ interface OpenSourceTool {
 export default function DiscoverPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
   const [openSourceTools, setOpenSourceTools] = useState<OpenSourceTool[]>([]);
   const [loadingOpenSource, setLoadingOpenSource] = useState(true);
   const [search, setSearch] = useState("");
   const [activeRole, setActiveRole] = useState("all");
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [runStatus, setRunStatus] = useState<{
-    scrape: "idle" | "running" | "success" | "error";
-    assess: "idle" | "running" | "success" | "error";
-    score: "idle" | "running" | "success" | "error";
-    cleanup: "idle" | "running" | "success" | "error";
-  }>({ scrape: "idle", assess: "idle", score: "idle", cleanup: "idle" });
-  const [runMessage, setRunMessage] = useState<string>("");
-  const [cleanupResult, setCleanupResult] = useState<string>("");
-  const [activeJobIds, setActiveJobIds] = useState<string[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
 
   const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
     setLoading(true);
@@ -70,6 +70,7 @@ export default function DiscoverPage() {
       const res = await fetch(`/api/products?${params}`);
       const data = await res.json();
       setProducts(data.products || []);
+      setTotalProducts(data.total || data.products?.length || 0);
     } catch (error) {
       console.error("Failed to fetch products:", error);
     } finally {
@@ -80,7 +81,7 @@ export default function DiscoverPage() {
   const fetchOpenSource = useCallback(async () => {
     setLoadingOpenSource(true);
     try {
-      const res = await fetch(`/api/open-source?sortBy=score&limit=24`);
+      const res = await fetch(`/api/open-source?sortBy=score&limit=6`);
       const data = await res.json();
       setOpenSourceTools(data.tools || []);
     } catch (error) {
@@ -90,11 +91,25 @@ export default function DiscoverPage() {
     }
   }, []);
 
+  const fetchFeatured = useCallback(async () => {
+    setLoadingFeatured(true);
+    try {
+      const res = await fetch(`/api/products?sortBy=score&limit=3`);
+      const data = await res.json();
+      setFeaturedProducts(data.products || []);
+    } catch (error) {
+      console.error("Failed to fetch featured products:", error);
+    } finally {
+      setLoadingFeatured(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     fetchProducts("", "all");
     fetchOpenSource();
-  }, [fetchProducts, fetchOpenSource]);
+    fetchFeatured();
+  }, [fetchProducts, fetchOpenSource, fetchFeatured]);
 
   // Handle search with debounce
   const handleSearchChange = (value: string) => {
@@ -115,302 +130,280 @@ export default function DiscoverPage() {
     fetchProducts(search, role);
   };
 
-  const runAction = async (
-    action:
-      | "scrape"
-      | "assess"
-      | "score"
-      | "cleanup-identify"
-      | "cleanup-remove"
-      | "cleanup-prune"
-  ) => {
-    setRunMessage("");
-    const key =
-      action === "cleanup-identify" || action === "cleanup-remove" || action === "cleanup-prune"
-        ? "cleanup"
-        : action;
-    setRunStatus((prev) => ({ ...prev, [key]: "running" }));
-    try {
-      const res = await fetch("/api/admin/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setRunStatus((prev) => ({ ...prev, [key]: "error" }));
-        setRunMessage(`Failed to run ${action}: ${data?.message || data?.error || res.status}`);
-      } else {
-        // Capture jobId if present
-        if (data.jobId) {
-          setActiveJobIds((prev) => [...prev, data.jobId]);
-        }
-        // For full-pipeline, capture all child jobIds
-        if (data.results) {
-          const childJobIds: string[] = [];
-          Object.values(data.results).forEach((result: any) => {
-            if (result.jobId) {
-              childJobIds.push(result.jobId);
-            }
-          });
-          if (childJobIds.length > 0) {
-            setActiveJobIds((prev) => [...prev, ...childJobIds]);
-          }
-        }
-
-        setRunStatus((prev) => ({ ...prev, [key]: "success" }));
-        setRunMessage(`${action} completed`);
-        if (key === "cleanup") {
-          const result =
-            action === "cleanup-identify"
-              ? `Found ${data?.data?.total ?? data?.data?.products?.length ?? "0"} low-quality products`
-              : action === "cleanup-remove"
-              ? `Removed ${data?.data?.removed?.lowQuality ?? 0} low-quality, pruned ${data?.data?.removed?.stale ?? 0} stale`
-              : `Pruned ${data?.data?.pruned ?? 0} stale products`;
-          setCleanupResult(result);
-        }
-      }
-    } catch (error) {
-      setRunStatus((prev) => ({ ...prev, [key]: "error" }));
-      setRunMessage(`Failed to run ${action}: ${error instanceof Error ? error.message : "Unknown error"}`);
-    }
-  };
-
-  const disableAssess = runStatus.scrape !== "success";
-  const disableScore = runStatus.assess !== "success";
-
   return (
     <div className="min-h-screen bg-[var(--background)]">
-      {/* Hero Section */}
-      <section className="pt-20 pb-12 md:pt-28 md:pb-16">
-        <div className="container-wide text-center">
-          <h1 className="mb-4">
-            Discover AI Tools
-          </h1>
-          <p className="text-lg md:text-xl text-[var(--foreground-muted)] max-w-xl mx-auto mb-10">
-            Find the best AI products to power your work
-          </p>
-          
-          {/* Search Bar */}
-          <div className="max-w-xl mx-auto relative">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)] pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search tools..."
-              value={search}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-14 pr-6 py-4 text-base rounded-full"
-            />
-          </div>
-
-          {/* Run pipeline controls */}
-          <div className="mt-10 max-w-4xl mx-auto grid gap-5">
-            <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 text-left shadow-sm">
-              <p className="text-sm text-[var(--foreground-subtle)] mb-4">
-                Run the pipeline in order. Assess performs smart classification (gatekeeper). Score comes last.
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <button
-                  onClick={() => runAction("scrape")}
-                  disabled={runStatus.scrape === "running"}
-                  className="flex items-center justify-center gap-2 rounded-full bg-[var(--brand-orange)] text-white px-4 py-3 font-semibold transition hover:opacity-90 disabled:opacity-60"
-                >
-                  <Play className="w-4 h-4" />
-                  {runStatus.scrape === "running" ? "Running Scrape..." : "Run Scrape Now"}
-                </button>
-                <button
-                  onClick={() => runAction("assess")}
-                  disabled={runStatus.assess === "running" || disableAssess}
-                  className="flex items-center justify-center gap-2 rounded-full border border-[var(--card-border)] bg-white px-4 py-3 font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
-                >
-                  <Play className="w-4 h-4" />
-                  {runStatus.assess === "running" ? "Assessing..." : "Run Assess Now"}
-                </button>
-                <button
-                  onClick={() => runAction("score")}
-                  disabled={runStatus.score === "running" || disableScore}
-                  className="flex items-center justify-center gap-2 rounded-full border border-[var(--card-border)] bg-white px-4 py-3 font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
-                >
-                  <Play className="w-4 h-4" />
-                  {runStatus.score === "running" ? "Scoring..." : "Run Score Now"}
-                </button>
+      {/* Hero Section with Gradient */}
+      <section className="hero-gradient text-white relative overflow-hidden">
+        <div className="container-wide py-16 md:py-24 relative z-10">
+          <div className="max-w-3xl mx-auto text-center">
+            {/* Mission badge */}
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 mb-6">
+              <Sparkles className="w-4 h-4" />
+              <span className="text-sm font-medium">Discover the next wave of AI</span>
+            </div>
+            
+            <h1 className="text-white mb-4">
+              Rising Stars in AI Tools
+            </h1>
+            
+            <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto mb-8 leading-relaxed">
+              We surface quality AI products gaining real traction. Not enterprise giants. 
+              Not weekend experiments. The promising middle ground that deserves your attention.
+            </p>
+            
+            {/* Search Bar */}
+            <div className="max-w-xl mx-auto relative">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)] pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search AI tools..."
+                value={search}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full pl-14 pr-6 py-4 text-base"
+              />
+            </div>
+            
+            {/* Trust indicators */}
+            <div className="flex flex-wrap items-center justify-center gap-4 mt-8">
+              <div className="trust-badge">
+                <Database className="w-4 h-4" />
+                <span>{totalProducts > 0 ? `${totalProducts}+` : "100+"} tools tracked</span>
               </div>
-              {runMessage && (
-                <p className="mt-3 text-sm text-[var(--foreground-muted)]">{runMessage}</p>
-              )}
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <StatusBadge label="Scrape" status={runStatus.scrape} />
-                <StatusBadge label="Assess" status={runStatus.assess} />
-                <StatusBadge label="Score" status={runStatus.score} />
+              <div className="trust-badge">
+                <Sparkles className="w-4 h-4" />
+                <span>AI-scored quality</span>
+              </div>
+              <div className="trust-badge">
+                <RefreshCw className="w-4 h-4" />
+                <span>Updated weekly</span>
               </div>
             </div>
-
-            {/* Real-time Job Status Panel */}
-            {activeJobIds.length > 0 && (
-              <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-sm">
-                <h2 className="text-lg font-semibold mb-4">Pipeline Status</h2>
-                <PipelineStatusPanel
-                  jobIds={activeJobIds}
-                  onJobComplete={(jobId) => {
-                    // Optionally remove completed jobs after a delay
-                    setTimeout(() => {
-                      setActiveJobIds((prev) => prev.filter((id) => id !== jobId));
-                    }, 10000); // Remove after 10 seconds
-                  }}
-                />
-              </div>
-            )}
           </div>
         </div>
       </section>
+
+      {/* Admin Controls - Collapsible */}
+      <section className="py-4 border-b border-[var(--card-border)]">
+        <div className="container-wide">
+          <AdminControls />
+        </div>
+      </section>
+
+      {/* Rising Stars Featured Section */}
+      {!loadingFeatured && featuredProducts.length > 0 && (
+        <section className="section border-b border-[var(--card-border)]">
+          <div className="container-wide">
+            <FadeIn>
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--brand-accent)]/10 text-[var(--brand-accent-dark)] text-xs font-medium mb-2">
+                    <TrendingUp className="w-3 h-3" />
+                    Top Rated
+                  </div>
+                  <h2 className="text-xl font-semibold text-[var(--foreground)]">
+                    Rising Stars
+                  </h2>
+                  <p className="text-sm text-[var(--foreground-muted)] mt-1">
+                    The highest-scored AI tools making waves right now.
+                  </p>
+                </div>
+              </div>
+            </FadeIn>
+
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: {
+                  transition: {
+                    staggerChildren: 0.1,
+                  },
+                },
+              }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-5"
+            >
+              {featuredProducts.map((product, idx) => (
+                <motion.div
+                  key={product.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 20 },
+                    visible: { opacity: 1, y: 0 },
+                  }}
+                  transition={{
+                    duration: 0.4,
+                    ease: [0.21, 0.47, 0.32, 0.98],
+                  }}
+                >
+                  <FeaturedCard product={product} rank={idx + 1} />
+                </motion.div>
+              ))}
+            </motion.div>
+          </div>
+        </section>
+      )}
 
       {/* Role Tabs */}
       <RoleTabs activeRole={activeRole} onRoleChange={handleRoleChange} />
 
       {/* Tools Grid */}
-      <section className="py-12">
+      <section className="section">
         <div className="container-wide">
-          {/* Results count */}
-          {!loading && (
-            <p className="text-sm text-[var(--foreground-subtle)] mb-6">
-              {products.length} {products.length === 1 ? "tool" : "tools"}
-              {activeRole !== "all" && ` for ${activeRole}`}
-              {search && ` matching "${search}"`}
-            </p>
-          )}
+          {/* Section header */}
+          <FadeIn delay={0.1}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-[var(--foreground)]">
+                  {activeRole === "all" ? "All Tools" : `Tools for ${activeRole}`}
+                </h2>
+                {!loading && (
+                  <p className="text-sm text-[var(--foreground-subtle)] mt-1">
+                    {products.length} {products.length === 1 ? "tool" : "tools"}
+                    {search && ` matching "${search}"`}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[var(--foreground-subtle)]" />
+                <span className="text-sm text-[var(--foreground-subtle)]">Sorted by newest</span>
+              </div>
+            </div>
+          </FadeIn>
 
           {/* Responsive Grid */}
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array.from({ length: 9 }).map((_, i) => (
-                <ToolCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-[var(--foreground-muted)] text-lg mb-2">
-                No tools found
-              </p>
-              <p className="text-[var(--foreground-subtle)]">
-                Try adjusting your search or filter
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {products.map((product) => (
-                <ToolCard key={product.id} product={product} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Cleanup Controls */}
-      <section className="py-8">
-        <div className="container-wide">
-          <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-sm">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm text-[var(--foreground-subtle)] uppercase tracking-wide">Data hygiene</p>
-                <h3 className="text-xl font-semibold text-[var(--foreground)]">Cleanup low-quality products</h3>
-                <p className="text-sm text-[var(--foreground-subtle)]">
-                  Identify and remove games, tutorials, hobby projects, excluded domains, and stale items.
+          <AnimatePresence mode="wait">
+            {loading ? (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+              >
+                {Array.from({ length: 9 }).map((_, i) => (
+                  <ToolCardSkeleton key={i} />
+                ))}
+              </motion.div>
+            ) : products.length === 0 ? (
+              <motion.div
+                key="empty"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-20 card"
+              >
+                <Search className="w-12 h-12 text-[var(--foreground-subtle)] mx-auto mb-4" />
+                <p className="text-[var(--foreground-muted)] text-lg mb-2">
+                  No tools found
                 </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => runAction("cleanup-identify")}
-                  disabled={runStatus.cleanup === "running"}
-                  className="rounded-full border border-[var(--card-border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
-                >
-                  {runStatus.cleanup === "running" ? "Identifying..." : "Identify"}
-                </button>
-                <button
-                  onClick={() => runAction("cleanup-remove")}
-                  disabled={runStatus.cleanup === "running"}
-                  className="rounded-full bg-[var(--brand-orange)] text-white px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
-                >
-                  {runStatus.cleanup === "running" ? "Cleaning..." : "Cleanup Now"}
-                </button>
-                <button
-                  onClick={() => runAction("cleanup-prune")}
-                  disabled={runStatus.cleanup === "running"}
-                  className="rounded-full border border-[var(--card-border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
-                >
-                  {runStatus.cleanup === "running" ? "Pruning..." : "Prune Stale"}
-                </button>
-              </div>
-            </div>
-            {cleanupResult && (
-              <p className="mt-3 text-sm text-[var(--foreground-muted)]">{cleanupResult}</p>
+                <p className="text-[var(--foreground-subtle)]">
+                  Try adjusting your search or filter
+                </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="products"
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: {},
+                  visible: {
+                    transition: {
+                      staggerChildren: 0.03,
+                    },
+                  },
+                }}
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+              >
+                {products.map((product) => (
+                  <motion.div
+                    key={product.id}
+                    variants={{
+                      hidden: { opacity: 0, y: 16 },
+                      visible: { opacity: 1, y: 0 },
+                    }}
+                    transition={{
+                      duration: 0.3,
+                      ease: [0.21, 0.47, 0.32, 0.98],
+                    }}
+                  >
+                    <ToolCard product={product} />
+                  </motion.div>
+                ))}
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
         </div>
       </section>
 
       {/* Open Source Section */}
-      <section className="py-12 bg-[var(--background-secondary)]">
+      <section className="section bg-[var(--background-secondary)]">
         <div className="container-wide">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div>
-              <p className="text-sm text-[var(--foreground-subtle)] uppercase tracking-wide">
-                Hugging Face Spaces
-              </p>
-              <h2 className="text-2xl font-semibold text-[var(--foreground)]">
-                Open Source Spotlight
-              </h2>
-              <p className="text-[var(--foreground-muted)]">
-                Ranked with the same AI scoring used across the site.
-              </p>
+          <FadeIn>
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <p className="text-xs font-medium text-[var(--accent)] uppercase tracking-wider mb-1">
+                  Hugging Face Spaces
+                </p>
+                <h2 className="text-xl font-semibold text-[var(--foreground)]">
+                  Open Source Spotlight
+                </h2>
+                <p className="text-sm text-[var(--foreground-muted)] mt-1">
+                  Quality open-source AI tools, ranked with the same scoring system.
+                </p>
+              </div>
             </div>
-          </div>
+          </FadeIn>
 
           {loadingOpenSource ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {Array.from({ length: 6 }).map((_, i) => (
                 <ToolCardSkeleton key={i} />
               ))}
             </div>
           ) : openSourceTools.length === 0 ? (
-            <div className="text-center py-10 text-[var(--foreground-muted)]">
-              No open-source tools available yet.
-            </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-10 card"
+            >
+              <p className="text-[var(--foreground-muted)]">
+                No open-source tools available yet.
+              </p>
+            </motion.div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: {
+                  transition: {
+                    staggerChildren: 0.05,
+                  },
+                },
+              }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
+            >
               {openSourceTools.map((tool) => (
-                <OpenSourceCard key={tool.id} tool={tool} />
+                <motion.div
+                  key={tool.id}
+                  variants={{
+                    hidden: { opacity: 0, y: 16 },
+                    visible: { opacity: 1, y: 0 },
+                  }}
+                  transition={{
+                    duration: 0.3,
+                    ease: [0.21, 0.47, 0.32, 0.98],
+                  }}
+                >
+                  <OpenSourceCard tool={tool} />
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-function StatusBadge({ label, status }: { label: string; status: "idle" | "running" | "success" | "error" }) {
-  const color =
-    status === "success"
-      ? "text-green-600"
-      : status === "running"
-      ? "text-amber-600"
-      : status === "error"
-      ? "text-red-600"
-      : "text-[var(--foreground-subtle)]";
-
-  const icon =
-    status === "success" ? (
-      <CheckCircle2 className="w-4 h-4" />
-    ) : status === "running" ? (
-      <Play className="w-4 h-4" />
-    ) : status === "error" ? (
-      <AlertTriangle className="w-4 h-4" />
-    ) : null;
-
-  return (
-    <div className={`flex items-center gap-2 ${color}`}>
-      {icon}
-      <span>{label}: {status}</span>
     </div>
   );
 }
