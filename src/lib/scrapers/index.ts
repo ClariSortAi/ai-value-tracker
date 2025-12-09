@@ -94,11 +94,16 @@ function isExcludedDomain(website: string | undefined): boolean {
     const hostname = url.hostname.toLowerCase();
     
     // Check if hostname exactly matches or is a subdomain of excluded domains
+    // Examples: 
+    // - 'itch.io' matches domain 'itch.io' ✓
+    // - 'user.itch.io' matches domain 'itch.io' ✓ (subdomain)
+    // - 'baditch.io' does NOT match domain 'itch.io' ✓ (requires dot prefix)
     return EXCLUDED_DOMAINS.some(domain => 
       hostname === domain || hostname.endsWith('.' + domain)
     );
   } catch (error) {
-    // Invalid URL, consider it excluded
+    // Invalid URL - log for debugging and consider it excluded
+    console.log(`[Domain Filter] Invalid URL format: ${website}`, error instanceof Error ? error.message : '');
     return true;
   }
 }

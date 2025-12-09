@@ -62,10 +62,19 @@ export async function GET(request: NextRequest) {
       // Identify and remove low-quality products
       const identified = await identifyLowQualityProducts();
       
+      // Safety limit: Maximum products to delete in one operation
+      const MAX_BATCH_DELETE = 100;
+      
       // Batch delete for better performance
       let removed = 0;
       if (identified.products.length > 0) {
-        const productIds = identified.products.map(p => p.id);
+        // Apply safety limit
+        const toDelete = identified.products.slice(0, MAX_BATCH_DELETE);
+        const productIds = toDelete.map(p => p.id);
+        
+        if (identified.products.length > MAX_BATCH_DELETE) {
+          console.log(`[Cleanup] Warning: ${identified.products.length} products identified, but limiting to ${MAX_BATCH_DELETE} per batch`);
+        }
         
         try {
           const result = await prisma.product.deleteMany({
@@ -75,7 +84,7 @@ export async function GET(request: NextRequest) {
           console.log(`[Cleanup] Removed ${removed} low-quality products`);
           
           // Log details of removed products
-          for (const product of identified.products) {
+          for (const product of toDelete) {
             console.log(`  - ${product.name} (${product.reason})`);
           }
         } catch (error) {

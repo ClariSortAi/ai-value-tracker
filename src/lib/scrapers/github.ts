@@ -26,8 +26,9 @@ const BLOCKLIST_PATTERNS = [
   /\b(awesome-|awesome_|curated|collection|list-of|resources)\b/i,
   // Experiments and toys
   /\b(experiment|toy|playground|proof-of-concept|poc-|prototype)\b/i,
-  // Machine learning libraries/frameworks (not products)
-  /^(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i, // Only if that's the exact full name
+  // Machine learning libraries/frameworks (not products) - exact name matches only
+  // Note: This pattern checks the full text, use with name-only string in shouldBlockRepo
+  /^(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i,
   // Dataset repositories
   /\b(dataset|datasets|benchmark|benchmarks)\b/i,
 ];
