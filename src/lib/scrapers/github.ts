@@ -74,9 +74,22 @@ export async function scrapeGitHub(): Promise<ScraperResult> {
           }
 
           // QUALITY FILTER: Exclude GitHub/docs URLs as homepage (not real product websites)
-          const homepage = repo.homepage.toLowerCase();
-          if (homepage.includes('github.com') || homepage.includes('github.io')) {
-            console.log(`[GitHub] Skipped: ${repo.name} (homepage is GitHub URL)`);
+          // Use URL parsing for proper domain validation
+          try {
+            const homepageUrl = new URL(repo.homepage);
+            const hostname = homepageUrl.hostname.toLowerCase();
+            // Check if domain is exactly github.com, github.io, or a subdomain thereof
+            // Match: github.com, *.github.com, github.io, *.github.io
+            if (hostname === 'github.com' || 
+                hostname === 'github.io' ||
+                hostname.endsWith('.github.com') || 
+                hostname.endsWith('.github.io')) {
+              console.log(`[GitHub] Skipped: ${repo.name} (homepage is GitHub URL: ${hostname})`);
+              continue;
+            }
+          } catch (error) {
+            // Invalid URL, skip
+            console.log(`[GitHub] Skipped: ${repo.name} (invalid homepage URL)`);
             continue;
           }
 
