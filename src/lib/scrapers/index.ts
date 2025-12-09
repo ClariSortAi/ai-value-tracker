@@ -23,42 +23,89 @@ export type { ScraperResult, ScrapedOpenSourceTool, ScrapedProduct };
 
 // Storage limits for free tier (0.5GB Neon)
 const MAX_PRODUCTS = 1000;
-const MIN_QUALITY_SCORE = 50; // Raised threshold - only keep quality products
-const MIN_OPEN_SOURCE_QUALITY = 20;
+const MIN_QUALITY_SCORE = 60; // Increased from 50 - stricter quality bar to filter low-engagement products
+const MIN_OPEN_SOURCE_QUALITY = 30; // Increased from 20 - ensure open source tools have meaningful engagement
 
 // Calculate quality score based on engagement signals
 function calculateQualityScore(product: ScrapedProduct): number {
   let score = 0;
   
-  // Upvotes (Product Hunt, HN)
+  // Upvotes (Product Hunt, HN) - increased weight for strong validation
   if (product.upvotes) {
-    if (product.upvotes >= 500) score += 50;
-    else if (product.upvotes >= 100) score += 30;
-    else if (product.upvotes >= 50) score += 20;
-    else if (product.upvotes >= 10) score += 10;
+    if (product.upvotes >= 1000) score += 60; // Viral products
+    else if (product.upvotes >= 500) score += 50;
+    else if (product.upvotes >= 200) score += 35; // Strong community interest
+    else if (product.upvotes >= 100) score += 25;
+    else if (product.upvotes >= 50) score += 15;
+    else if (product.upvotes >= 20) score += 8; // Minimum meaningful engagement
   }
   
-  // Stars (GitHub)
+  // Stars (GitHub) - higher bar for open source
   if (product.stars) {
-    if (product.stars >= 10000) score += 50;
-    else if (product.stars >= 1000) score += 35;
-    else if (product.stars >= 100) score += 20;
-    else if (product.stars >= 50) score += 10;
+    if (product.stars >= 50000) score += 60; // Extremely popular
+    else if (product.stars >= 10000) score += 50;
+    else if (product.stars >= 5000) score += 40;
+    else if (product.stars >= 1000) score += 30;
+    else if (product.stars >= 500) score += 20;
+    else if (product.stars >= 100) score += 10;
   }
   
-  // Comments indicate engagement
-  if (product.comments && product.comments >= 10) score += 10;
+  // Comments indicate active engagement
+  if (product.comments) {
+    if (product.comments >= 50) score += 15; // Very active discussion
+    else if (product.comments >= 20) score += 10;
+    else if (product.comments >= 10) score += 5;
+  }
   
-  // Has description = better data quality
-  if (product.description && product.description.length > 50) score += 10;
+  // Quality metadata - indicators of legitimacy
+  if (product.description && product.description.length > 100) score += 10; // Comprehensive description
+  else if (product.description && product.description.length > 50) score += 5;
   
-  // Has logo = more legitimate
-  if (product.logo) score += 5;
+  if (product.logo) score += 5; // Professional branding
   
-  // Has website = more legitimate
-  if (product.website) score += 5;
+  // Website is CRITICAL for commercial products
+  if (product.website) {
+    score += 10; // Increased weight - real products have websites
+  } else {
+    score -= 15; // Penalty for missing website - likely not a real product
+  }
   
   return score;
+}
+
+// Domains to exclude - common for games, tutorials, and non-commercial projects
+const EXCLUDED_DOMAINS = [
+  'itch.io', 'gamejolt.com', 'kongregate.com', 'newgrounds.com', // Game platforms
+  'github.io', 'github.com', 'gitlab.com', 'bitbucket.org', // Code hosting (no commercial product)
+  'repl.it', 'replit.com', 'codesandbox.io', 'stackblitz.com', // Code playgrounds
+  'youtube.com', 'youtu.be', 'vimeo.com', // Video platforms (demos/tutorials)
+  'medium.com', 'dev.to', 'hashnode.dev', // Blog platforms (articles, not products)
+  'notion.site', 'notion.so', // Notion pages (often personal projects)
+  'reddit.com', 'discord.gg', 'discord.com', // Community platforms
+  'kaggle.com', // Dataset/competition platform
+];
+
+// Check if website is from an excluded domain
+function isExcludedDomain(website: string | undefined): boolean {
+  if (!website) return false;
+  
+  try {
+    const url = new URL(website);
+    const hostname = url.hostname.toLowerCase();
+    
+    // Check if hostname exactly matches or is a subdomain of excluded domains
+    // Examples: 
+    // - 'itch.io' matches domain 'itch.io' ✓
+    // - 'user.itch.io' matches domain 'itch.io' ✓ (subdomain)
+    // - 'baditch.io' does NOT match domain 'itch.io' ✓ (requires dot prefix)
+    return EXCLUDED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch (error) {
+    // Invalid URL - log for debugging and consider it excluded
+    console.log(`[Domain Filter] Invalid URL format: ${website}`, error instanceof Error ? error.message : '');
+    return true;
+  }
 }
 
 // Check if product is an LLM/infrastructure (not a role-specific tool)
@@ -200,6 +247,13 @@ export async function saveScrapedProducts(
     try {
       // LAYER 1: Quality score filter (always active)
       if (quality < MIN_QUALITY_SCORE) {
+        skipped++;
+        continue;
+      }
+
+      // LAYER 1.5: Exclude products from non-commercial domains
+      if (isExcludedDomain(product.website)) {
+        console.log(`[Scraper] Skipped: ${product.name} (excluded domain: ${product.website})`);
         skipped++;
         continue;
       }
@@ -519,4 +573,88 @@ export async function pruneStaleProducts(): Promise<number> {
 
   console.log(`[Scraper] Pruned ${result.count} stale products`);
   return result.count;
+}
+
+// Identify potentially low-quality products that slipped through filters
+// Returns list of products that may need manual review or removal
+export async function identifyLowQualityProducts(): Promise<{
+  total: number;
+  products: Array<{ id: string; name: string; reason: string; quality: number }>;
+}> {
+  const allProducts = await prisma.product.findMany({
+    select: {
+      id: true,
+      name: true,
+      tagline: true,
+      description: true,
+      website: true,
+      upvotes: true,
+      stars: true,
+      comments: true,
+      targetAudience: true,
+      productType: true,
+      viabilityScore: true,
+    },
+  });
+
+  const lowQuality: Array<{ id: string; name: string; reason: string; quality: number }> = [];
+
+  for (const product of allProducts) {
+    const text = `${product.name} ${product.tagline || ""} ${product.description || ""}`.toLowerCase();
+    
+    // Calculate quality score
+    const quality = calculateQualityScore({
+      name: product.name,
+      tagline: product.tagline || undefined,
+      description: product.description || undefined,
+      website: product.website || undefined,
+      upvotes: product.upvotes,
+      stars: product.stars,
+      comments: product.comments,
+      tags: [],
+      launchDate: new Date(),
+      source: "MANUAL",
+    });
+
+    // Check for game patterns
+    if (/\b(game|gaming|tower defense|arcade|puzzle|rpg|play|player|gameplay|level)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be a game", quality });
+      continue;
+    }
+
+    // Check for tutorial/educational patterns
+    if (/\b(tutorial|course|learn|education|teach)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be educational content", quality });
+      continue;
+    }
+
+    // Check for hobby project patterns
+    if (/\b(i built|i made|i coded|weekend project|side project)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Appears to be a hobby project", quality });
+      continue;
+    }
+
+    // Check for excluded domains
+    if (product.website && isExcludedDomain(product.website)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: `Excluded domain: ${product.website}`, quality });
+      continue;
+    }
+
+    // Check for low engagement
+    if (quality < MIN_QUALITY_SCORE) {
+      lowQuality.push({ id: product.id, name: product.name, reason: `Low quality score: ${quality}`, quality });
+      continue;
+    }
+
+    // Check for rejected product types
+    if (product.productType && ['game', 'tutorial', 'other'].includes(product.productType) && product.targetAudience !== 'b2b' && product.targetAudience !== 'developer') {
+      lowQuality.push({ id: product.id, name: product.name, reason: `Product type: ${product.productType}, audience: ${product.targetAudience}`, quality });
+      continue;
+    }
+  }
+
+  return {
+    total: lowQuality.length,
+    products: lowQuality,
+  };
 }

@@ -1,37 +1,36 @@
 import { Octokit } from "@octokit/rest";
 import { ScrapedProduct, ScraperResult } from "./types";
 
-// AI-related search queries for GitHub - HIGH bar (10k+ stars) for quality
-// These should be genuinely popular DEVELOPER TOOLS, not ML libraries or academic code
+// AI-related search queries for GitHub - VERY HIGH bar (15k+ stars) for quality
+// Focus on tools that are actually used in production, not just starred for learning
 const AI_QUERIES = [
-  "topic:ai-tools stars:>10000",
-  "topic:developer-tools ai stars:>10000",
-  "topic:llm stars:>10000",
-  "topic:gpt stars:>10000",
-  "topic:generative-ai stars:>10000",
-  "langchain stars:>10000",
-  "copilot stars:>10000",
+  "topic:ai-tools stars:>15000", // Raised from 10k to 15k
+  "topic:developer-tools ai stars:>15000",
+  "topic:chatbot stars:>15000",
+  "topic:code-generation stars:>15000",
+  "ollama stars:>15000", // Specific popular tools
+  "langchain stars:>15000",
 ];
 
-// Blocklist patterns - reject repos matching these in name/description
+// Blocklist patterns - reject repos matching these in name/description (comprehensive)
 const BLOCKLIST_PATTERNS = [
-  /tutorial/i,
-  /course/i,
-  /learning/i,
-  /demo/i,
-  /example/i,
-  /game/i,
-  /thesis/i,
-  /homework/i,
-  /assignment/i,
-  /lecture/i,
-  /workshop/i,
-  /awesome-/i,  // Awesome lists are not products
-  /papers/i,
-  /research/i,
-  /experiment/i,
-  /toy/i,
-  /playground/i,
+  // Educational content
+  /\b(tutorial|course|learning|lesson|lecture|workshop|bootcamp|education|teach|training)\b/i,
+  // Examples and demos
+  /\b(demo|example|sample|template|boilerplate|starter)\b/i,
+  // Games (comprehensive)
+  /\b(game|gaming|tower-defense|arcade|puzzle|rpg|roguelike|platformer|simulation|multiplayer)\b/i,
+  // Academic/research
+  /\b(thesis|homework|assignment|research|papers|academic|arxiv|conference)\b/i,
+  // Lists and collections
+  /\b(awesome-|awesome_|curated|collection|list-of|resources)\b/i,
+  // Experiments and toys
+  /\b(experiment|toy|playground|proof-of-concept|poc-|prototype)\b/i,
+  // Machine learning libraries/frameworks (not products) - exact name matches only
+  // Note: This pattern checks the full text, use with name-only string in shouldBlockRepo
+  /^(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i,
+  // Dataset repositories
+  /\b(dataset|datasets|benchmark|benchmarks)\b/i,
 ];
 
 // Check if repo should be blocked based on name/description
@@ -66,11 +65,36 @@ export async function scrapeGitHub(): Promise<ScraperResult> {
           if (seenRepos.has(repo.full_name)) continue;
           seenRepos.add(repo.full_name);
 
-          // QUALITY FILTER: Require minimum 10k stars
-          if ((repo.stargazers_count || 0) < 10000) continue;
+          // QUALITY FILTER: Require minimum 15k stars (increased from 10k for higher bar)
+          if ((repo.stargazers_count || 0) < 15000) continue;
 
           // QUALITY FILTER: Require homepage URL (real products have websites)
-          if (!repo.homepage) continue;
+          if (!repo.homepage) {
+            console.log(`[GitHub] Skipped: ${repo.name} (no homepage)`);
+            continue;
+          }
+
+          // QUALITY FILTER: Exclude GitHub/docs URLs as homepage (not real product websites)
+          // Use URL parsing for proper domain validation
+          const GITHUB_DOMAINS = ['github.com', 'github.io'];
+          
+          try {
+            const homepageUrl = new URL(repo.homepage);
+            const hostname = homepageUrl.hostname.toLowerCase();
+            // Check if domain is exactly a GitHub domain or a subdomain thereof
+            const isGitHubDomain = GITHUB_DOMAINS.some(domain =>
+              hostname === domain || hostname.endsWith('.' + domain)
+            );
+            
+            if (isGitHubDomain) {
+              console.log(`[GitHub] Skipped: ${repo.name} (homepage is GitHub URL: ${hostname})`);
+              continue;
+            }
+          } catch (error) {
+            // Invalid URL, skip
+            console.log(`[GitHub] Skipped: ${repo.name} (invalid homepage URL)`);
+            continue;
+          }
 
           // QUALITY FILTER: Block tutorials, games, academic projects
           if (shouldBlockRepo(repo.name, repo.description)) {

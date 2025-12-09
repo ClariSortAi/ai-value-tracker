@@ -3,7 +3,8 @@ import { ScrapedProduct, ScraperResult } from "./types";
 const HN_ALGOLIA_API = "https://hn.algolia.com/api/v1";
 
 // Minimum upvotes required - ensures validated community interest
-const MIN_UPVOTES = 100;
+// Increased from 100 to 150 to filter out lower-quality submissions
+const MIN_UPVOTES = 150;
 
 // AI-related search terms - focused on SaaS/startup launches
 const AI_SEARCH_TERMS = [
@@ -16,23 +17,21 @@ const AI_SEARCH_TERMS = [
   "AI tool launch",
 ];
 
-// Blocklist patterns - reject posts matching these
+// Blocklist patterns - reject posts matching these (comprehensive game and hobby project detection)
 const BLOCKLIST_PATTERNS = [
-  /game/i,
-  /i coded/i,
-  /i built/i,
-  /i made/i,
-  /tutorial/i,
-  /experiment/i,
-  /toy/i,
-  /weekend project/i,
-  /side project/i,
-  /learning/i,
-  /homework/i,
-  /fun project/i,
-  /my first/i,
-  /just for fun/i,
-  /playing with/i,
+  // Games (be very thorough)
+  /\b(game|gaming|tower defense|arcade|puzzle|rpg|roguelike|platformer|strategy game|simulation game|multiplayer|pvp|fps|mmorpg|idle game|clicker|match-3|card game|board game|dungeon crawler|bullet hell)\b/i,
+  /\b(play|player|gameplay|level|enemy|boss|weapon|combat|battle|quest|dungeon|loot|score|leaderboard|achievement)\b/i,
+  // Hobby/personal projects
+  /\b(i coded|i built|i made|i created|my first|personal project|hobby project|weekend project|side project|quarantine project|lockdown project)\b/i,
+  // Educational content
+  /\b(tutorial|course|learn|learning|education|teach|training|homework|lesson|lecture|workshop|bootcamp)\b/i,
+  // Experiments/toys
+  /\b(experiment|toy|playground|demo|proof of concept|prototype|hackathon|fun project|just for fun|playing with|messing around)\b/i,
+  // Resource collections
+  /\b(awesome|curated list|resource list|collection of|list of tools|directory of)\b/i,
+  // Academic/research
+  /\b(thesis|dissertation|research project|academic|paper|study)\b/i,
 ];
 
 // Check if post should be blocked based on title
