@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ACTIONS = ["scrape", "assess", "score", "cleanup-identify", "cleanup-remove", "cleanup-prune"] as const;
+const ACTIONS = [
+  "scrape",
+  "assess",
+  "score",
+  "cleanup-identify",
+  "cleanup-remove",
+  "cleanup-prune",
+  "full-pipeline",
+] as const;
 type Action = (typeof ACTIONS)[number];
 
 function buildInternalUrl(path: string) {
@@ -40,7 +48,9 @@ export async function POST(request: NextRequest) {
       ? "/api/admin/cleanup?action=identify"
       : action === "cleanup-remove"
       ? "/api/admin/cleanup?action=remove"
-      : "/api/admin/cleanup?action=prune";
+      : action === "cleanup-prune"
+      ? "/api/admin/cleanup?action=prune"
+      : "/api/admin/run/full-pipeline";
 
   const url = buildInternalUrl(targetPath);
 
@@ -55,29 +65,85 @@ export async function POST(request: NextRequest) {
         process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
     }
 
-    const res = await fetch(url, {
-      method: "GET",
-      headers,
-      cache: "no-store",
-    });
+    // For full-pipeline, orchestrate sequentially instead of single fetch
+    if (action === "full-pipeline") {
+      const steps: Array<{ name: string; path: string }> = [
+        { name: "scrape", path: "/api/scrape" },
+        { name: "assess", path: "/api/assess" },
+        { name: "score", path: "/api/score" },
+        { name: "cleanup", path: "/api/admin/cleanup?action=remove" },
+      ];
 
-    const text = await res.text();
-    let data: unknown = null;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      data = text || null;
+      const results: Record<
+        string,
+        { status: number; ok: boolean; data: unknown }
+      > = {};
+
+      for (const step of steps) {
+        const res = await fetch(buildInternalUrl(step.path), {
+          method: "GET",
+          headers,
+          cache: "no-store",
+        });
+        const text = await res.text();
+        let data: unknown = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = text || null;
+        }
+        results[step.name] = { status: res.status, ok: res.ok, data };
+
+        // If a step fails, stop early
+        if (!res.ok) {
+          return NextResponse.json(
+            {
+              action,
+              ok: false,
+              failedStep: step.name,
+              results,
+            },
+            { status: 500 }
+          );
+        }
+
+        // Small delay between steps to be gentle on rate limits
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      return NextResponse.json(
+        {
+          action,
+          ok: true,
+          results,
+        },
+        { status: 200 }
+      );
+    } else {
+      const res = await fetch(url, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      });
+
+      const text = await res.text();
+      let data: unknown = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text || null;
+      }
+
+      return NextResponse.json(
+        {
+          action,
+          status: res.status,
+          ok: res.ok,
+          data,
+        },
+        { status: res.ok ? 200 : res.status }
+      );
     }
-
-    return NextResponse.json(
-      {
-        action,
-        status: res.status,
-        ok: res.ok,
-        data,
-      },
-      { status: res.ok ? 200 : res.status }
-    );
   } catch (error) {
     return NextResponse.json(
       {
