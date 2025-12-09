@@ -162,32 +162,100 @@ flowchart TD
    - **There's An AI** (`src/lib/scrapers/theres-an-ai.ts`): Scrapes AI directory listings
 
 3. **Quality Filtering** (`src/lib/scrapers/index.ts`):
-   - Calculates quality score based on:
-     - Upvotes (Product Hunt, HN): 10-50 points
-     - Stars (GitHub): 10-50 points
-     - Comments: +10 points if ≥10
-     - Description length: +10 points if >50 chars
-     - Logo presence: +5 points
-     - Website presence: +5 points
-   - Minimum quality threshold: 30 points
+   - **Multi-Layer Filtering Approach**:
+     - **Layer 1**: Quality score calculation (engagement-based)
+     - **Layer 2**: Domain validation (exclude non-commercial domains)
+     - **Layer 3**: AI Gatekeeper (commercial viability assessment)
+   
+   - **Quality Score Calculation** (weighted by engagement):
+     - Upvotes (Product Hunt, HN): 
+       - 1000+: 60 points (viral products)
+       - 500+: 50 points
+       - 200+: 35 points (strong community interest)
+       - 100+: 25 points
+       - 50+: 15 points
+       - 20+: 8 points (minimum meaningful engagement)
+     - Stars (GitHub):
+       - 50k+: 60 points (extremely popular)
+       - 10k+: 50 points
+       - 5k+: 40 points
+       - 1k+: 30 points
+       - 500+: 20 points
+       - 100+: 10 points
+     - Comments:
+       - 50+: 15 points (very active discussion)
+       - 20+: 10 points
+       - 10+: 5 points
+     - Description quality:
+       - >100 chars: 10 points (comprehensive)
+       - >50 chars: 5 points
+     - Logo presence: +5 points (professional branding)
+     - Website presence: +10 points (CRITICAL - real products have websites)
+     - **Missing website penalty**: -15 points
+   
+   - **Minimum Quality Thresholds**:
+     - Products: 60 points (increased from 50)
+     - Open Source Tools: 30 points (increased from 20)
+   
+   - **Domain Exclusion** (non-commercial platforms):
+     - Game platforms: itch.io, gamejolt.com, kongregate.com, newgrounds.com
+     - Code hosting: github.io, gitlab.com, bitbucket.org (no commercial layer)
+     - Playgrounds: repl.it, codesandbox.io, stackblitz.com
+     - Video/blogs: youtube.com, vimeo.com, medium.com, dev.to
+     - Personal projects: notion.site, discord.gg
+     - Datasets: kaggle.com
+   
+   - **Blocklist Patterns** (comprehensive rejection):
+     - **Games**: tower defense, arcade, puzzle, RPG, roguelike, platformer, multiplayer, FPS, MMORPG, idle game, clicker, match-3, card game, board game, dungeon crawler
+     - **Educational**: tutorial, course, learning, homework, lesson, lecture, workshop, bootcamp
+     - **Hobby Projects**: "I built", "I made", "I coded", weekend project, side project, personal project
+     - **Experiments**: demo, playground, proof of concept, prototype, hackathon, toy
+     - **Academic**: thesis, dissertation, research project, paper, arxiv
+     - **Collections**: awesome lists, curated lists, resource directories
+     - **Infrastructure-only**: Pure ML libraries (PyTorch, TensorFlow) without product layer
 
-4. **Deduplication**:
+4. **AI Gatekeeper Assessment** (`src/lib/ai/gatekeeper.ts`):
+   - **Two-Stage Filtering**:
+     - Fast mode (scraping): Skip gatekeeper, save with `viabilityScore=null`
+     - Assess mode (batch): Run AI gatekeeper on unassessed products
+   
+   - **Enhanced Gatekeeper Prompt**:
+     - **ACCEPT**: Commercial SaaS with clear pricing, useful for business professionals, real product with user base
+     - **REJECT**: 
+       - ANY type of game (AI-coded games, tower defense, roguelike, platformer, etc.)
+       - Tutorials, courses, educational content, learning resources
+       - Academic research, papers, thesis, experiments
+       - Open-source libraries without commercial SaaS layer (LangChain, PyTorch, etc.)
+       - Hobby/weekend/side projects
+       - Consumer-only apps with no B2B use case
+       - Pure infrastructure/DevOps tools only for engineers
+       - Developer libraries, SDKs, APIs without product layer
+       - Browser extensions (unless clearly B2B SaaS)
+       - Local/self-hosted-only tools without SaaS offering
+   
+   - **Rule-Based Fallback** (when Gemini unavailable):
+     - Comprehensive pattern matching for games, tutorials, experiments
+     - B2B signal detection (pricing, enterprise, team, business, SaaS)
+     - Developer tool identification
+     - Minimum website requirement
+
+5. **Deduplication**:
    - Checks for existing products by `sourceId` or `slug`
    - Updates existing products with fresh data
    - Creates new products with unique slugs
 
-5. **Capacity Management**:
+6. **Capacity Management**:
    - Maximum products: 1000 (free tier limit)
    - When at capacity, only replaces products if new quality > existing + 20 points
    - Removes lowest quality products to make room
 
-6. **Role Inference**:
+7. **Role Inference**:
    - Analyzes product metadata to infer target roles:
      - Marketing, Sales, Product, Engineering, Design, Operations, HR
      - Special category: "llm" for LLM/infrastructure tools
      - Default: "general" for non-role-specific tools
 
-7. **Database Write**: Products stored in `Product` table with:
+8. **Database Write**: Products stored in `Product` table with:
    - Basic metadata (name, slug, tagline, description)
    - Engagement metrics (upvotes, comments, stars)
    - Source tracking (source, sourceUrl, sourceId)
@@ -333,7 +401,13 @@ model Score {
 ### Scraping
 - **Product Hunt API**: Rate limits depend on token tier
 - **GitHub API**: 60 requests/hour (unauthenticated), 5000/hour (authenticated)
+  - **Quality bar**: 15,000+ stars (increased from 10,000)
+  - **Homepage required**: Must have external website (not github.io or github.com)
+  - **Blocklist**: Excludes tutorials, demos, games, academic projects, awesome lists, datasets
 - **Hacker News**: No official rate limit, but respectful scraping
+  - **Quality bar**: 150+ upvotes (increased from 100)
+  - **External URL required**: Real products have websites, not just HN discussions
+  - **Blocklist**: Games, tutorials, hobby projects, experiments
 - **There's An AI**: No official rate limit
 
 ### Scoring
@@ -388,6 +462,32 @@ curl -X POST https://your-app.vercel.app/api/score \
 ```
 
 Or via GET requests (for testing without auth in development).
+
+### Cleanup & Quality Control
+
+New endpoint for identifying and removing low-quality products:
+
+```bash
+# Identify problematic products (without removing)
+curl -X GET https://your-app.vercel.app/api/admin/cleanup?action=identify \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+
+# Remove identified low-quality products
+curl -X GET https://your-app.vercel.app/api/admin/cleanup?action=remove \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+
+# Only prune stale products (6+ months old, low engagement)
+curl -X GET https://your-app.vercel.app/api/admin/cleanup?action=prune \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+The cleanup endpoint identifies products that match:
+- Game patterns (tower defense, puzzle, RPG, etc.)
+- Tutorial/educational content patterns
+- Hobby project patterns ("I built", "weekend project")
+- Excluded domains (itch.io, github.io, repl.it, etc.)
+- Low quality scores (< 60 points)
+- Non-B2B product types without appropriate audience
 
 ## Data Flow Summary
 
