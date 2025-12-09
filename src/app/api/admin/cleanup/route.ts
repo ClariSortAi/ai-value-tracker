@@ -62,14 +62,24 @@ export async function GET(request: NextRequest) {
       // Identify and remove low-quality products
       const identified = await identifyLowQualityProducts();
       
+      // Batch delete for better performance
       let removed = 0;
-      for (const product of identified.products) {
+      if (identified.products.length > 0) {
+        const productIds = identified.products.map(p => p.id);
+        
         try {
-          await prisma.product.delete({ where: { id: product.id } });
-          removed++;
-          console.log(`[Cleanup] Removed: ${product.name} (${product.reason})`);
+          const result = await prisma.product.deleteMany({
+            where: { id: { in: productIds } }
+          });
+          removed = result.count;
+          console.log(`[Cleanup] Removed ${removed} low-quality products`);
+          
+          // Log details of removed products
+          for (const product of identified.products) {
+            console.log(`  - ${product.name} (${product.reason})`);
+          }
         } catch (error) {
-          console.error(`[Cleanup] Error removing ${product.name}:`, error);
+          console.error(`[Cleanup] Error during batch delete:`, error);
         }
       }
 

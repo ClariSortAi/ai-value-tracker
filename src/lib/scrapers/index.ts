@@ -88,8 +88,19 @@ const EXCLUDED_DOMAINS = [
 // Check if website is from an excluded domain
 function isExcludedDomain(website: string | undefined): boolean {
   if (!website) return false;
-  const lowerWebsite = website.toLowerCase();
-  return EXCLUDED_DOMAINS.some(domain => lowerWebsite.includes(domain));
+  
+  try {
+    const url = new URL(website);
+    const hostname = url.hostname.toLowerCase();
+    
+    // Check if hostname exactly matches or is a subdomain of excluded domains
+    return EXCLUDED_DOMAINS.some(domain => 
+      hostname === domain || hostname.endsWith('.' + domain)
+    );
+  } catch (error) {
+    // Invalid URL, consider it excluded
+    return true;
+  }
 }
 
 // Check if product is an LLM/infrastructure (not a role-specific tool)

@@ -27,7 +27,7 @@ const BLOCKLIST_PATTERNS = [
   // Experiments and toys
   /\b(experiment|toy|playground|proof-of-concept|poc-|prototype)\b/i,
   // Machine learning libraries/frameworks (not products)
-  /\b(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i, // Only if that's the full name
+  /^(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i, // Only if that's the exact full name
   // Dataset repositories
   /\b(dataset|datasets|benchmark|benchmarks)\b/i,
 ];
@@ -75,15 +75,17 @@ export async function scrapeGitHub(): Promise<ScraperResult> {
 
           // QUALITY FILTER: Exclude GitHub/docs URLs as homepage (not real product websites)
           // Use URL parsing for proper domain validation
+          const GITHUB_DOMAINS = ['github.com', 'github.io'];
+          
           try {
             const homepageUrl = new URL(repo.homepage);
             const hostname = homepageUrl.hostname.toLowerCase();
-            // Check if domain is exactly github.com, github.io, or a subdomain thereof
-            // Match: github.com, *.github.com, github.io, *.github.io
-            if (hostname === 'github.com' || 
-                hostname === 'github.io' ||
-                hostname.endsWith('.github.com') || 
-                hostname.endsWith('.github.io')) {
+            // Check if domain is exactly a GitHub domain or a subdomain thereof
+            const isGitHubDomain = GITHUB_DOMAINS.some(domain =>
+              hostname === domain || hostname.endsWith('.' + domain)
+            );
+            
+            if (isGitHubDomain) {
               console.log(`[GitHub] Skipped: ${repo.name} (homepage is GitHub URL: ${hostname})`);
               continue;
             }
