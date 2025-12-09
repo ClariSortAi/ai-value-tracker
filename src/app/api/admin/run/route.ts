@@ -19,9 +19,25 @@ function buildInternalUrl(path: string) {
   return `${base}${path}`;
 }
 
+async function parseAction(request: NextRequest): Promise<Action | undefined> {
+  if (request.method === "POST") {
+    const body = await request.json().catch(() => ({}));
+    return body?.action as Action | undefined;
+  }
+  const url = new URL(request.url);
+  return url.searchParams.get("action") as Action | undefined;
+}
+
+export async function GET(request: NextRequest) {
+  return runAction(request);
+}
+
 export async function POST(request: NextRequest) {
-  const body = await request.json().catch(() => ({}));
-  const action = body?.action as Action | undefined;
+  return runAction(request);
+}
+
+async function runAction(request: NextRequest) {
+  const action = await parseAction(request);
 
   if (!action || !ACTIONS.includes(action)) {
     return NextResponse.json(

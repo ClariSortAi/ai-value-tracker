@@ -2,12 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
-      "path": "/api/admin/run",
-      "schedule": "0 6 * * 0",
-      "method": "POST",
-      "body": {
-        "action": "full-pipeline"
-      }
+      "path": "/api/admin/run?action=full-pipeline",
+      "schedule": "0 6 * * 0"
     }
   ]
 }
