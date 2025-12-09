@@ -727,6 +727,36 @@ export async function identifyLowQualityProducts(): Promise<{
       continue;
     }
 
+    // Check for LLM infrastructure / open-source tools (NOT commercial products)
+    if (/\b(llm.inference|model.serving|inference.engine|self.hosted|local.ai|local.llm)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "LLM infrastructure, not commercial product", quality });
+      continue;
+    }
+
+    // Check for specific open-source LLM tools
+    if (/\b(ollama|llama\.cpp|vllm|gguf|ggml|text-generation)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Open-source LLM tool", quality });
+      continue;
+    }
+
+    // Check for chat UI wrappers (not original products)
+    if (/\b(webui|web.ui|chat.ui|frontend.for|interface.for|client.for|chat.client)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "UI wrapper, not original product", quality });
+      continue;
+    }
+
+    // Check for RAG/LLM frameworks (libraries, not products)
+    if (/\b(rag.framework|rag.pipeline|vector.store|langchain|llamaindex|retrieval.augmented)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "RAG/LLM framework, not commercial product", quality });
+      continue;
+    }
+
+    // Check for "step by step" / "from scratch" tutorials
+    if (/\b(step.by.step|from.scratch|implement.+from|build.your.own|how.to)\b/i.test(text)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: "Tutorial/educational content", quality });
+      continue;
+    }
+
     // Check for excluded domains
     if (product.website && isExcludedDomain(product.website)) {
       lowQuality.push({ id: product.id, name: product.name, reason: `Excluded domain: ${product.website}`, quality });
@@ -739,9 +769,9 @@ export async function identifyLowQualityProducts(): Promise<{
       continue;
     }
 
-    // Check for rejected product types (including new exam_prep and student_tool types)
-    if (product.productType && ['game', 'tutorial', 'exam_prep', 'student_tool', 'other'].includes(product.productType) && product.targetAudience !== 'b2b' && product.targetAudience !== 'developer') {
-      lowQuality.push({ id: product.id, name: product.name, reason: `Product type: ${product.productType}, audience: ${product.targetAudience}`, quality });
+    // Check for rejected product types (libraries and frameworks are now rejected)
+    if (product.productType && ['game', 'tutorial', 'exam_prep', 'student_tool', 'library', 'framework', 'other'].includes(product.productType)) {
+      lowQuality.push({ id: product.id, name: product.name, reason: `Product type: ${product.productType}`, quality });
       continue;
     }
   }

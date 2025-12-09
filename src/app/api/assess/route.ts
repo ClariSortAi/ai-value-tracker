@@ -153,7 +153,21 @@ export async function GET(request: NextRequest) {
         });
 
         // Check if product should be rejected
-        const shouldReject = !viability.isCommercialSaaS && viability.targetAudience !== "developer";
+        // STRICTER LOGIC: Developer tools MUST also show commercial signals
+        // We want commercial SaaS products, not pure open-source infrastructure
+        const isDeveloperTool = viability.targetAudience === "developer";
+        const isOpenSourceInfra = viability.productType === "library" || viability.productType === "framework";
+        const isTutorialOrExam = viability.productType === "tutorial" || viability.productType === "exam_prep" || viability.productType === "student_tool";
+        
+        // Reject if:
+        // 1. Not commercial SaaS AND not a developer tool with commercial potential
+        // 2. Pure open-source infrastructure (libraries, frameworks without SaaS layer)
+        // 3. Tutorials, exam prep, student tools (always reject)
+        const shouldReject = 
+          isTutorialOrExam ||
+          isOpenSourceInfra ||
+          (!viability.isCommercialSaaS && !isDeveloperTool) ||
+          (!viability.isCommercialSaaS && isDeveloperTool && viability.confidence < 0.6);
 
         if (shouldReject) {
           // Delete the product (it doesn't meet our criteria)

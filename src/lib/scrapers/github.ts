@@ -14,10 +14,12 @@ const AI_QUERIES = [
 
 // Blocklist patterns - reject repos matching these in name/description (comprehensive)
 const BLOCKLIST_PATTERNS = [
-  // Educational content
+  // Educational content - comprehensive
   /\b(tutorial|course|learning|lesson|lecture|workshop|bootcamp|education|teach|training)\b/i,
+  /\b(step.by.step|from.scratch|how.to|guide|handbook|cookbook|cheatsheet)\b/i,
+  /\b(implement|build|create|make).+(yourself|own|from|step)/i, // "Implement X from scratch"
   // Examples and demos
-  /\b(demo|example|sample|template|boilerplate|starter)\b/i,
+  /\b(demo|example|sample|template|boilerplate|starter|scaffold)\b/i,
   // Games (comprehensive)
   /\b(game|gaming|tower-defense|arcade|puzzle|rpg|roguelike|platformer|simulation|multiplayer)\b/i,
   // Academic/research
@@ -26,11 +28,16 @@ const BLOCKLIST_PATTERNS = [
   /\b(awesome-|awesome_|curated|collection|list-of|resources)\b/i,
   // Experiments and toys
   /\b(experiment|toy|playground|proof-of-concept|poc-|prototype)\b/i,
-  // Machine learning libraries/frameworks (not products) - exact name matches only
-  // Note: This pattern checks the full text, use with name-only string in shouldBlockRepo
+  // Pure infrastructure/libraries (no commercial layer)
+  /\b(llm-inference|model-serving|inference-engine|rag-pipeline)\b/i,
+  /\b(local-ai|local-llm|self-hosted|on-premise|offline)\b/i,
+  /\b(webui|web-ui|frontend|ui-for|interface-for|client-for)\b/i,
+  // Machine learning libraries/frameworks (not products)
   /^(pytorch|tensorflow|keras|scikit-learn|numpy|pandas)$/i,
   // Dataset repositories
   /\b(dataset|datasets|benchmark|benchmarks)\b/i,
+  // Chat UI wrappers (not original products)
+  /\b(chat|chatbot|assistant|agent).*(ui|interface|frontend|client)\b/i,
 ];
 
 // Check if repo should be blocked based on name/description

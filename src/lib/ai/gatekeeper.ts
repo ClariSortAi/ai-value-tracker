@@ -47,12 +47,17 @@ We surface MID-MARKET RISING STARS - quality AI products gaining real traction. 
 - Dating apps, social media for consumers
 - Personal health/fitness apps without enterprise features
 
-### Developer-Only Infrastructure
+### Developer-Only Infrastructure (REJECT ALL)
 - Pure DevOps tools (CI/CD, hosting, monitoring) without business features
 - Developer libraries, SDKs, APIs without a product layer
 - "Awesome" lists, resource collections, directories
 - Browser extensions (unless clearly enterprise B2B)
 - Local/self-hosted-only tools without cloud SaaS offering
+- LLM inference engines (ollama, llama.cpp, vllm, etc.)
+- Chat UI wrappers for LLMs (NextChat, open-webui, lobe-chat, etc.)
+- RAG frameworks/libraries without a product layer
+- ML model serving infrastructure
+- Self-hosted AI tools without a commercial cloud offering
 
 ### Specific Red Flags
 - Generic chatbot wrappers with no unique value
@@ -149,6 +154,13 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
     { pattern: /\b(experiment|toy|playground|demo|proof of concept|prototype|hackathon|fun project|just for fun)\b/i, reason: "Appears to be an experiment/demo", type: "other" },
     { pattern: /\b(thesis|dissertation|research project|academic paper|research|scholarly|conference paper|arxiv)\b/i, reason: "Appears to be academic research", type: "other" },
     { pattern: /\b(i built|i made|i coded|i created|my first|weekend project|side project|hobby project|personal project|portfolio)\b/i, reason: "Appears to be a hobby/portfolio project", type: "other" },
+    
+    // LLM Infrastructure (open-source tools, not commercial products)
+    { pattern: /\b(llm inference|model serving|inference engine|self.hosted|on.premise|local ai|local llm)\b/i, reason: "Open-source LLM infrastructure, not commercial product", type: "library" },
+    { pattern: /\b(ollama|llama\.cpp|vllm|text-generation|huggingface|transformers)\b/i, reason: "LLM framework/library, not commercial product", type: "library" },
+    { pattern: /\b(webui|web ui|chat ui|frontend for|interface for|client for)\b/i, reason: "UI wrapper, not original product", type: "framework" },
+    { pattern: /\b(rag|retrieval augmented|vector store|embedding|langchain|llamaindex)\b/i, reason: "RAG/LLM framework, not commercial product", type: "library" },
+    { pattern: /\b(step by step|from scratch|implement|build your own|how to)\b/i, reason: "Tutorial/educational content", type: "tutorial" },
     
     // Non-commercial
     { pattern: /\b(awesome|awesome-list|curated list|resource list|collection of|links to)\b/i, reason: "Appears to be a resource list", type: "other" },
