@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ACTIONS = ["scrape", "assess", "score"] as const;
+const ACTIONS = ["scrape", "assess", "score", "cleanup-identify", "cleanup-remove", "cleanup-prune"] as const;
 type Action = (typeof ACTIONS)[number];
 
 function buildInternalUrl(path: string) {
@@ -34,7 +34,13 @@ export async function POST(request: NextRequest) {
       ? "/api/scrape"
       : action === "assess"
       ? "/api/assess"
-      : "/api/score";
+      : action === "score"
+      ? "/api/score"
+      : action === "cleanup-identify"
+      ? "/api/admin/cleanup?action=identify"
+      : action === "cleanup-remove"
+      ? "/api/admin/cleanup?action=remove"
+      : "/api/admin/cleanup?action=prune";
 
   const url = buildInternalUrl(targetPath);
 

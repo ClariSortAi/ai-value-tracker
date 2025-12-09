@@ -49,8 +49,10 @@ export default function DiscoverPage() {
     scrape: "idle" | "running" | "success" | "error";
     assess: "idle" | "running" | "success" | "error";
     score: "idle" | "running" | "success" | "error";
-  }>({ scrape: "idle", assess: "idle", score: "idle" });
+    cleanup: "idle" | "running" | "success" | "error";
+  }>({ scrape: "idle", assess: "idle", score: "idle", cleanup: "idle" });
   const [runMessage, setRunMessage] = useState<string>("");
+  const [cleanupResult, setCleanupResult] = useState<string>("");
 
   const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
     setLoading(true);
@@ -111,9 +113,21 @@ export default function DiscoverPage() {
     fetchProducts(search, role);
   };
 
-  const runAction = async (action: "scrape" | "assess" | "score") => {
+  const runAction = async (
+    action:
+      | "scrape"
+      | "assess"
+      | "score"
+      | "cleanup-identify"
+      | "cleanup-remove"
+      | "cleanup-prune"
+  ) => {
     setRunMessage("");
-    setRunStatus((prev) => ({ ...prev, [action]: "running" }));
+    const key =
+      action === "cleanup-identify" || action === "cleanup-remove" || action === "cleanup-prune"
+        ? "cleanup"
+        : action;
+    setRunStatus((prev) => ({ ...prev, [key]: "running" }));
     try {
       const res = await fetch("/api/admin/run", {
         method: "POST",
@@ -122,14 +136,23 @@ export default function DiscoverPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setRunStatus((prev) => ({ ...prev, [action]: "error" }));
+        setRunStatus((prev) => ({ ...prev, [key]: "error" }));
         setRunMessage(`Failed to run ${action}: ${data?.message || data?.error || res.status}`);
       } else {
-        setRunStatus((prev) => ({ ...prev, [action]: "success" }));
+        setRunStatus((prev) => ({ ...prev, [key]: "success" }));
         setRunMessage(`${action} completed`);
+        if (key === "cleanup") {
+          const result =
+            action === "cleanup-identify"
+              ? `Found ${data?.data?.total ?? data?.data?.products?.length ?? "0"} low-quality products`
+              : action === "cleanup-remove"
+              ? `Removed ${data?.data?.removed?.lowQuality ?? 0} low-quality, pruned ${data?.data?.removed?.stale ?? 0} stale`
+              : `Pruned ${data?.data?.pruned ?? 0} stale products`;
+          setCleanupResult(result);
+        }
       }
     } catch (error) {
-      setRunStatus((prev) => ({ ...prev, [action]: "error" }));
+      setRunStatus((prev) => ({ ...prev, [key]: "error" }));
       setRunMessage(`Failed to run ${action}: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   };
@@ -244,6 +267,49 @@ export default function DiscoverPage() {
               ))}
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Cleanup Controls */}
+      <section className="py-8">
+        <div className="container-wide">
+          <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] p-6 shadow-sm">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm text-[var(--foreground-subtle)] uppercase tracking-wide">Data hygiene</p>
+                <h3 className="text-xl font-semibold text-[var(--foreground)]">Cleanup low-quality products</h3>
+                <p className="text-sm text-[var(--foreground-subtle)]">
+                  Identify and remove games, tutorials, hobby projects, excluded domains, and stale items.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => runAction("cleanup-identify")}
+                  disabled={runStatus.cleanup === "running"}
+                  className="rounded-full border border-[var(--card-border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
+                >
+                  {runStatus.cleanup === "running" ? "Identifying..." : "Identify"}
+                </button>
+                <button
+                  onClick={() => runAction("cleanup-remove")}
+                  disabled={runStatus.cleanup === "running"}
+                  className="rounded-full bg-[var(--brand-orange)] text-white px-4 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {runStatus.cleanup === "running" ? "Cleaning..." : "Cleanup Now"}
+                </button>
+                <button
+                  onClick={() => runAction("cleanup-prune")}
+                  disabled={runStatus.cleanup === "running"}
+                  className="rounded-full border border-[var(--card-border)] bg-white px-4 py-2 text-sm font-semibold transition hover:border-[var(--brand-orange)] disabled:opacity-60"
+                >
+                  {runStatus.cleanup === "running" ? "Pruning..." : "Prune Stale"}
+                </button>
+              </div>
+            </div>
+            {cleanupResult && (
+              <p className="mt-3 text-sm text-[var(--foreground-muted)]">{cleanupResult}</p>
+            )}
+          </div>
         </div>
       </section>
 
