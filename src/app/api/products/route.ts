@@ -19,6 +19,11 @@ export async function GET(request: NextRequest) {
           orderBy: { generatedAt: "desc" },
           take: 1,
         },
+        channelScores: {
+          orderBy: { generatedAt: "desc" },
+          take: 1,
+        },
+        vendor: true,
       },
       // Explicitly select fields to avoid issues with missing columns during migrations
     });
@@ -28,7 +33,12 @@ export async function GET(request: NextRequest) {
       ...product,
       tags: JSON.parse(product.tags || "[]") as string[],
       targetRoles: JSON.parse(product.targetRoles || "[]") as string[],
+      integrationTargets: JSON.parse(product.integrationTargets || "[]") as string[],
+      channelUseCases: JSON.parse(product.channelUseCases || "[]") as string[],
+      partnerProgramFit: JSON.parse(product.partnerProgramFit || "[]") as string[],
     }));
+
+    const channelOnly = searchParams.get("channelOnly") === "true";
 
     // Filter by search
     if (search) {
@@ -47,6 +57,10 @@ export async function GET(request: NextRequest) {
       filteredProducts = filteredProducts.filter((p) => p.category === category);
     }
 
+    if (channelOnly) {
+      filteredProducts = filteredProducts.filter((p) => p.isChannelRelevant);
+    }
+
     // Filter by role (if not "all")
     if (role && role !== "all") {
       filteredProducts = filteredProducts.filter((p) =>
@@ -63,6 +77,11 @@ export async function GET(request: NextRequest) {
       filteredProducts.sort(
         (a, b) =>
           (b.scores[0]?.compositeScore || 0) - (a.scores[0]?.compositeScore || 0)
+      );
+    } else if (sortBy === "channel") {
+      filteredProducts.sort(
+        (a, b) =>
+          (b.channelScores?.[0]?.opportunity || 0) - (a.channelScores?.[0]?.opportunity || 0)
       );
     } else if (sortBy === "name") {
       filteredProducts.sort((a, b) => a.name.localeCompare(b.name));

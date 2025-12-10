@@ -12,6 +12,26 @@ import prisma from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { assessCommercialViability, ViabilityAssessment } from "@/lib/ai/gatekeeper";
 
+async function upsertVendor(name?: string, type?: string, website?: string) {
+  if (!name) return null;
+
+  const existing = await prisma.vendor.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
+
+  if (existing) return existing.id;
+
+  const vendor = await prisma.vendor.create({
+    data: {
+      name,
+      type,
+      website,
+    },
+  });
+
+  return vendor.id;
+}
+
 export {
   scrapeProductHunt,
   scrapeGitHub,
@@ -365,6 +385,12 @@ export async function saveScrapedProducts(
 
       if (existing) {
         // Update existing product (always update to refresh data)
+        const vendorId = await upsertVendor(
+          viability?.vendorName || product.vendorName,
+          viability?.vendorType || product.vendorType,
+          product.website
+        );
+
         await prisma.product.update({
           where: { id: existing.id },
           data: {
@@ -376,6 +402,23 @@ export async function saveScrapedProducts(
             comments: Math.max(product.comments || 0, existing.comments),
             stars: Math.max(product.stars || 0, existing.stars),
             targetRoles: JSON.stringify(inferTargetRoles(product)),
+            vendorId: vendorId ?? existing.vendorId,
+            isChannelRelevant: viability?.isChannelRelevant ?? existing.isChannelRelevant,
+            channelUseCases: JSON.stringify(
+              viability?.primaryChannelUseCase
+                ? [viability.primaryChannelUseCase]
+                : product.channelUseCases || JSON.parse(existing.channelUseCases || "[]")
+            ),
+            integrationTargets: JSON.stringify(
+              viability?.integrationTargets?.length
+                ? viability.integrationTargets
+                : product.integrationHints || JSON.parse(existing.integrationTargets || "[]")
+            ),
+            partnerProgramFit: JSON.stringify(
+              viability?.partnerProgramSignals?.length
+                ? viability.partnerProgramSignals
+                : product.channelSignals || JSON.parse(existing.partnerProgramFit || "[]")
+            ),
             // Update viability data from gatekeeper (only if assessment was done)
             ...(viability ? {
               viabilityScore: viability.confidence,
@@ -446,6 +489,27 @@ export async function saveScrapedProducts(
             upvotes: product.upvotes || 0,
             comments: product.comments || 0,
             stars: product.stars || 0,
+            vendorId: await upsertVendor(
+              viability?.vendorName || product.vendorName,
+              viability?.vendorType || product.vendorType,
+              product.website
+            ),
+            isChannelRelevant: viability?.isChannelRelevant ?? false,
+            channelUseCases: JSON.stringify(
+              viability?.primaryChannelUseCase
+                ? [viability.primaryChannelUseCase]
+                : product.channelUseCases || []
+            ),
+            integrationTargets: JSON.stringify(
+              viability?.integrationTargets?.length
+                ? viability.integrationTargets
+                : product.integrationHints || []
+            ),
+            partnerProgramFit: JSON.stringify(
+              viability?.partnerProgramSignals?.length
+                ? viability.partnerProgramSignals
+                : product.channelSignals || []
+            ),
             // Viability data from AI gatekeeper (null if skipped - will be assessed later by /api/assess)
             viabilityScore: viability?.confidence ?? null,
             targetAudience: viability?.targetAudience ?? null,

@@ -10,9 +10,16 @@ export interface ViabilityAssessment {
   productType: "saas" | "library" | "framework" | "game" | "tutorial" | "exam_prep" | "student_tool" | "other";
   confidence: number;
   rejectionReason?: string;
+  // Channel context
+  isChannelRelevant?: boolean;
+  vendorName?: string;
+  vendorType?: "OEM" | "ISV" | "GSI" | "VAR" | "Marketplace" | "Other";
+  primaryChannelUseCase?: string;
+  integrationTargets?: string[];
+  partnerProgramSignals?: string[];
 }
 
-const GATEKEEPER_PROMPT = `You are an EXTREMELY STRICT B2B SaaS product classifier for a curated "Rising Stars in AI Tools" directory. 
+const GATEKEEPER_PROMPT = `You are an EXTREMELY STRICT B2B SaaS product classifier for a curated "Rising Stars in AI Tools" directory that now has a CHANNEL ECOSYSTEM focus.
 
 ## OUR MISSION
 We surface MID-MARKET RISING STARS - quality AI products gaining real traction. NOT enterprise giants. NOT weekend experiments. Products that deserve attention because they solve real business problems.
@@ -23,6 +30,12 @@ We surface MID-MARKET RISING STARS - quality AI products gaining real traction. 
 3. Shows COMMERCIAL INTENT: has dedicated website with About/Team, Pricing, or Terms pages
 4. Provides REAL BUSINESS VALUE - solves a workflow problem, not just a tech demo
 5. Is AI-POWERED but focused on BUSINESS OUTCOMES, not just "uses AI"
+
+## CHANNEL FOCUS - IDENTIFY IF THE PRODUCT IS RELEVANT TO CHANNEL/ECOSYSTEM USE CASES
+- Partner program management, co-sell collaboration, marketplace listing/analytics
+- OEM/ISV integration tooling (Microsoft, AWS, Azure, Salesforce, ServiceNow, Cisco, SAP, Google Cloud)
+- Reseller/GSI enablement, services attach, managed services automation
+- Channel data/insights: pipeline sharing, MDF management, partner onboarding
 
 ## REJECT IMMEDIATELY if the product is:
 ### Games (ALL types - no exceptions)
@@ -80,7 +93,15 @@ Website: {website}
   "targetAudience": "<b2b|b2c|developer|unknown>",
   "productType": "<saas|library|framework|game|tutorial|exam_prep|student_tool|other>",
   "confidence": <0.0-1.0>,
-  "rejectionReason": "<specific reason if rejected, null if accepted>"
+  "rejectionReason": "<specific reason if rejected, null if accepted>",
+  "channel": {
+    "isChannelRelevant": <true/false>,
+    "vendorName": "<detected company name if present>",
+    "vendorType": "<OEM|ISV|GSI|VAR|Marketplace|Other>",
+    "primaryChannelUseCase": "<short description>",
+    "integrationTargets": ["<ecosystem names>", "..."] ,
+    "partnerProgramSignals": ["<partner portal|MDF|co-sell|marketplace|reseller>"]
+  }
 }
 
 BE EXTREMELY STRICT. When in doubt, REJECT. We only want products that a VP of Marketing, Sales Director, or Operations Manager would actually consider using.`;
@@ -124,6 +145,12 @@ export async function assessCommercialViability(
       productType: parsed.productType || "other",
       confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
       rejectionReason: parsed.rejectionReason || undefined,
+      isChannelRelevant: Boolean(parsed.channel?.isChannelRelevant),
+      vendorName: parsed.channel?.vendorName || undefined,
+      vendorType: parsed.channel?.vendorType || undefined,
+      primaryChannelUseCase: parsed.channel?.primaryChannelUseCase || undefined,
+      integrationTargets: parsed.channel?.integrationTargets || [],
+      partnerProgramSignals: parsed.channel?.partnerProgramSignals || [],
     };
   } catch (error) {
     console.error("[Gatekeeper] AI assessment error for:", product.name, error);
@@ -198,6 +225,14 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
   const devSignals = /developer|code|programming|ide|cli|terminal|github|npm/i;
   const isDeveloperTool = devSignals.test(text);
 
+  // Channel relevance heuristics
+  const channelSignals = /partner|reseller|distributor|marketplace|co-?sell|gsi|systems integrator|channel program|alliances?|partner portal|msp|managed service/i;
+  const ecosystemSignals = /(microsoft|azure|aws|amazon web services|google cloud|gcp|salesforce|servicenow|cisco|sap)/i;
+  const isChannelRelevant = channelSignals.test(text) || ecosystemSignals.test(text);
+  const inferredIntegrationTargets = ecosystemSignals.test(text)
+    ? Array.from(new Set(text.match(/microsoft|azure|aws|amazon web services|google cloud|gcp|salesforce|servicenow|cisco|sap/gi) || [])).map(v => v.toLowerCase())
+    : [];
+
   // Must have a website to be considered commercial
   if (!product.website) {
     return {
@@ -206,6 +241,8 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
       productType: "other",
       confidence: 0.6,
       rejectionReason: "No website provided",
+      isChannelRelevant,
+      integrationTargets: inferredIntegrationTargets,
     };
   }
 
@@ -218,6 +255,8 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
     productType: isCommercialSaaS ? "saas" : "other",
     confidence: 0.5,
     rejectionReason: isCommercialSaaS ? undefined : "Insufficient B2B signals",
+    isChannelRelevant,
+    integrationTargets: inferredIntegrationTargets,
   };
 }
 

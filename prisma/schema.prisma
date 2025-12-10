@@ -36,6 +36,15 @@ model Product {
   productType    String? // 'saas', 'library', 'framework', 'game', 'tutorial', 'other'
   businessCategory String? // 'marketing' | 'sales' | 'customer_service' | 'productivity' | 'developer' | 'other'
 
+  // Channel & ecosystem context
+  isChannelRelevant    Boolean  @default(false)
+  channelUseCases      String   @default("[]") // JSON array of channel-focused use cases (co-sell, marketplace, services attach)
+  integrationTargets   String   @default("[]") // JSON array of ecosystems: AWS, Azure, Salesforce, ServiceNow, Cisco, etc.
+  partnerProgramFit    String   @default("[]") // JSON array of partner program signals/tags
+  channelNotes         String?
+  vendorId             String?
+  vendor               Vendor?  @relation(fields: [vendorId], references: [id])
+
   // Commercial signals
   hasPricingPage    Boolean    @default(false)
   hasTeamPage       Boolean    @default(false)
@@ -50,6 +59,7 @@ model Product {
   enrichedAt          DateTime? // When enrichment was last run
 
   scores Score[]
+  channelScores ChannelScore[]
   // rawData removed to save storage (free tier: 0.5GB limit)
 
   createdAt DateTime @default(now())
@@ -154,6 +164,39 @@ model OpenSourceScore {
 
   @@index([openSourceToolId])
   @@index([compositeScore])
+}
+
+model Vendor {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  type     String?  // OEM, ISV, GSI, VAR, Marketplace
+  website  String?
+  segment  String?  // enterprise, midmarket, smb
+  notes    String?
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChannelScore {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  channelFit           Int    @default(0)
+  coSellReadiness      Int    @default(0)
+  integrationReadiness Int    @default(0)
+  opportunity          Int    @default(0)
+  evidence             String @default("[]") // JSON array of evidence strings/links
+  reasoning            String?
+  confidence           Float  @default(0)
+  generatedAt          DateTime @default(now())
+
+  @@index([productId])
+  @@index([channelFit])
+  @@index([opportunity])
 }
 
 model PipelineJob {

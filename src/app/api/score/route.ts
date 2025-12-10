@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import prisma from "@/lib/db";
-import { scoreProduct, type ProductData } from "@/lib/ai";
+import { scoreChannelReadiness, scoreProduct, type ProductData } from "@/lib/ai";
 import {
   startJob,
   updateJobProgress,
@@ -85,6 +85,9 @@ export async function GET(request: NextRequest) {
           none: {},
         },
       },
+      include: {
+        vendor: true,
+      },
       take: 10, // Limit to avoid rate limits
     });
 
@@ -163,6 +166,38 @@ export async function GET(request: NextRequest) {
             reasoning: JSON.stringify(scoreResult.reasoning),
           },
         });
+
+        // Channel scoring (only if product shows channel metadata)
+        const integrationTargets = JSON.parse(product.integrationTargets || "[]");
+        const channelUseCases = JSON.parse(product.channelUseCases || "[]");
+        const partnerProgramFit = JSON.parse(product.partnerProgramFit || "[]");
+
+        if (product.isChannelRelevant || integrationTargets.length || partnerProgramFit.length) {
+          const channelScore = await scoreChannelReadiness({
+            name: product.name,
+            description: product.description || undefined,
+            website: product.website || undefined,
+            vendorName: product.vendor?.name,
+            vendorType: product.vendor?.type,
+            integrationTargets,
+            channelUseCases,
+            partnerProgramFit,
+            signals: [product.source, product.category || ""].filter(Boolean),
+          });
+
+          await prisma.channelScore.create({
+            data: {
+              productId: product.id,
+              channelFit: channelScore.channelFit,
+              coSellReadiness: channelScore.coSellReadiness,
+              integrationReadiness: channelScore.integrationReadiness,
+              opportunity: channelScore.opportunity,
+              evidence: JSON.stringify(channelScore.evidence),
+              reasoning: channelScore.reasoning,
+              confidence: channelScore.confidence,
+            },
+          });
+        }
 
         results.scored++;
         processedCount++;

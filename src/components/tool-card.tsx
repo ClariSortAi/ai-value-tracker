@@ -18,6 +18,8 @@ interface ToolCardProps {
     tags?: string[];
     targetRoles?: string[];
     source?: string | null;
+    vendor?: { name?: string | null } | null;
+    isChannelRelevant?: boolean | null;
     launchDate: string | Date;
     upvotes?: number;
     stars?: number;
@@ -155,6 +157,16 @@ export function ToolCard({ product }: ToolCardProps) {
             {product.category && (
               <span className="tag tag-accent text-xs">
                 {product.category}
+              </span>
+            )}
+            {product.isChannelRelevant && (
+              <span className="tag text-xs bg-[var(--accent-muted)] text-[var(--accent-foreground)]">
+                Channel ready
+              </span>
+            )}
+            {product.vendor?.name && (
+              <span className="tag text-xs">
+                {product.vendor.name}
               </span>
             )}
             {product.targetRoles?.slice(0, 1).map((role) => (
