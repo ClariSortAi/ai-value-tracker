@@ -1,15 +1,15 @@
 import { Octokit } from "@octokit/rest";
-import { ScrapedOpenSourceTool, ScraperResult } from "./types";
+import { ScrapedProduct, ScraperResult } from "./types";
 
-// AI-related search queries for GitHub - High bar (10k+ stars) for quality open source projects
-// GitHub repos are now routed to OpenSourceTool table, not commercial Product table
+// AI-related search queries for GitHub - VERY HIGH bar (15k+ stars) for quality
+// Focus on tools that are actually used in production, not just starred for learning
 const AI_QUERIES = [
-  "topic:ai-tools stars:>10000",
-  "topic:developer-tools ai stars:>10000",
-  "topic:chatbot stars:>10000",
-  "topic:code-generation stars:>10000",
-  "ollama stars:>10000",
-  "langchain stars:>10000",
+  "topic:ai-tools stars:>15000", // Raised from 10k to 15k
+  "topic:developer-tools ai stars:>15000",
+  "topic:chatbot stars:>15000",
+  "topic:code-generation stars:>15000",
+  "ollama stars:>15000", // Specific popular tools
+  "langchain stars:>15000",
 ];
 
 // Blocklist patterns - reject repos matching these in name/description (comprehensive)
@@ -46,7 +46,7 @@ function shouldBlockRepo(name: string, description: string | null): boolean {
   return BLOCKLIST_PATTERNS.some(pattern => pattern.test(text));
 }
 
-export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceTool>> {
+export async function scrapeGitHub(): Promise<ScraperResult> {
   const token = process.env.GITHUB_TOKEN;
   
   const octokit = new Octokit({
@@ -54,7 +54,7 @@ export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceToo
   });
 
   try {
-    const allTools: ScrapedOpenSourceTool[] = [];
+    const allProducts: ScrapedProduct[] = [];
     const seenRepos = new Set<string>();
 
     // Search for AI-related repositories
@@ -72,8 +72,36 @@ export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceToo
           if (seenRepos.has(repo.full_name)) continue;
           seenRepos.add(repo.full_name);
 
-          // QUALITY FILTER: Require minimum 10k stars for open source visibility
-          if ((repo.stargazers_count || 0) < 10000) continue;
+          // QUALITY FILTER: Require minimum 15k stars (increased from 10k for higher bar)
+          if ((repo.stargazers_count || 0) < 15000) continue;
+
+          // QUALITY FILTER: Require homepage URL (real products have websites)
+          if (!repo.homepage) {
+            console.log(`[GitHub] Skipped: ${repo.name} (no homepage)`);
+            continue;
+          }
+
+          // QUALITY FILTER: Exclude GitHub/docs URLs as homepage (not real product websites)
+          // Use URL parsing for proper domain validation
+          const GITHUB_DOMAINS = ['github.com', 'github.io'];
+          
+          try {
+            const homepageUrl = new URL(repo.homepage);
+            const hostname = homepageUrl.hostname.toLowerCase();
+            // Check if domain is exactly a GitHub domain or a subdomain thereof
+            const isGitHubDomain = GITHUB_DOMAINS.some(domain =>
+              hostname === domain || hostname.endsWith('.' + domain)
+            );
+            
+            if (isGitHubDomain) {
+              console.log(`[GitHub] Skipped: ${repo.name} (homepage is GitHub URL: ${hostname})`);
+              continue;
+            }
+          } catch (error) {
+            // Invalid URL, skip
+            console.log(`[GitHub] Skipped: ${repo.name} (invalid homepage URL)`);
+            continue;
+          }
 
           // QUALITY FILTER: Block tutorials, games, academic projects
           if (shouldBlockRepo(repo.name, repo.description)) {
@@ -84,29 +112,23 @@ export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceToo
           // Extract topics/tags
           const tags = repo.topics?.slice(0, 5) || [];
           
-          // Extract license info
-          const license = repo.license?.spdx_id || repo.license?.name || undefined;
+          // GitHub repos go into "Developer Tools" category
+          const category = "Developer Tools";
 
-          // Get owner/author
-          const author = repo.owner?.login || undefined;
-
-          allTools.push({
+          allProducts.push({
             name: repo.name,
             tagline: repo.description?.slice(0, 150) || undefined,
             description: repo.description || undefined,
-            repoUrl: repo.html_url, // GitHub URL is the repo URL
-            spaceUrl: repo.homepage || undefined, // Homepage is the space/demo URL if available
+            website: repo.homepage, // Use actual homepage, not GitHub URL
             logo: repo.owner?.avatar_url,
-            runtime: repo.language || undefined, // Use programming language as "runtime"
-            license,
-            tags: tags.length > 0 ? [...tags, "Open Source"] : ["AI", "Open Source"],
+            category,
+            tags: tags.length > 0 ? [...tags, "Open Source", "Developer Tools"] : ["AI", "Open Source", "Developer Tools"],
             launchDate: new Date(repo.created_at || Date.now()),
             source: "GITHUB",
             sourceUrl: repo.html_url,
-            sourceId: `github-${repo.id}`,
-            likes: repo.stargazers_count || 0, // Stars = likes for open source
-            downloads: repo.forks_count || 0, // Forks = downloads proxy for open source
-            author,
+            sourceId: repo.id.toString(),
+            stars: repo.stargazers_count || 0,
+            upvotes: repo.stargazers_count || 0,
             rawData: {
               full_name: repo.full_name,
               language: repo.language,
@@ -126,14 +148,14 @@ export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceToo
       }
     }
 
-    // Sort by likes (stars) and limit
-    const sortedTools = allTools
-      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+    // Sort by stars and limit
+    const sortedProducts = allProducts
+      .sort((a, b) => (b.stars || 0) - (a.stars || 0))
       .slice(0, 50);
 
     return {
       success: true,
-      products: sortedTools,
+      products: sortedProducts,
     };
   } catch (error) {
     console.error("GitHub scraper error:", error);
@@ -145,95 +167,82 @@ export async function scrapeGitHub(): Promise<ScraperResult<ScrapedOpenSourceToo
   }
 }
 
-function getGitHubDemoProducts(): ScrapedOpenSourceTool[] {
+function getGitHubDemoProducts(): ScrapedProduct[] {
   return [
     {
       name: "langchain",
       tagline: "Building applications with LLMs through composability",
       description: "LangChain is a framework for developing applications powered by language models.",
-      repoUrl: "https://github.com/langchain-ai/langchain",
-      spaceUrl: "https://langchain.com",
+      website: "https://langchain.com",
       logo: "https://avatars.githubusercontent.com/u/126733545",
-      runtime: "Python",
-      license: "MIT",
-      tags: ["LLM", "AI", "NLP", "Framework", "Open Source"],
+      category: "LLM Framework",
+      tags: ["LLM", "AI", "NLP", "Framework"],
       launchDate: new Date("2022-10-01"),
       source: "GITHUB",
       sourceUrl: "https://github.com/langchain-ai/langchain",
       sourceId: "github-langchain",
-      likes: 92000,
-      downloads: 15000,
-      author: "langchain-ai",
+      stars: 92000,
+      upvotes: 92000,
     },
     {
       name: "ollama",
       tagline: "Get up and running with large language models locally",
       description: "Run Llama 2, Code Llama, and other models locally on your machine.",
-      repoUrl: "https://github.com/ollama/ollama",
-      spaceUrl: "https://ollama.ai",
+      website: "https://ollama.ai",
       logo: "https://avatars.githubusercontent.com/u/151674099",
-      runtime: "Go",
-      license: "MIT",
-      tags: ["LLM", "Local AI", "Llama", "Self-hosted", "Open Source"],
+      category: "LLM",
+      tags: ["LLM", "Local AI", "Llama", "Self-hosted"],
       launchDate: new Date("2023-07-01"),
       source: "GITHUB",
       sourceUrl: "https://github.com/ollama/ollama",
       sourceId: "github-ollama",
-      likes: 85000,
-      downloads: 12000,
-      author: "ollama",
+      stars: 85000,
+      upvotes: 85000,
     },
     {
       name: "stable-diffusion-webui",
       tagline: "Stable Diffusion web UI",
       description: "A browser interface based on Gradio library for Stable Diffusion.",
-      repoUrl: "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
+      website: "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
       logo: "https://avatars.githubusercontent.com/u/121283862",
-      runtime: "Python",
-      license: "AGPL-3.0",
-      tags: ["Stable Diffusion", "AI Art", "Image Generation", "Open Source"],
+      category: "AI Image Generation",
+      tags: ["Stable Diffusion", "AI Art", "Image Generation"],
       launchDate: new Date("2022-08-01"),
       source: "GITHUB",
       sourceUrl: "https://github.com/AUTOMATIC1111/stable-diffusion-webui",
       sourceId: "github-sd-webui",
-      likes: 138000,
-      downloads: 25000,
-      author: "AUTOMATIC1111",
+      stars: 138000,
+      upvotes: 138000,
     },
     {
       name: "transformers",
       tagline: "State-of-the-art Machine Learning for PyTorch, TensorFlow, and JAX",
       description: "Hugging Face Transformers provides thousands of pretrained models for NLP, computer vision, audio, and more.",
-      repoUrl: "https://github.com/huggingface/transformers",
-      spaceUrl: "https://huggingface.co/transformers",
+      website: "https://huggingface.co/transformers",
       logo: "https://avatars.githubusercontent.com/u/25720743",
-      runtime: "Python",
-      license: "Apache-2.0",
-      tags: ["NLP", "Deep Learning", "PyTorch", "TensorFlow", "Open Source"],
+      category: "Machine Learning",
+      tags: ["NLP", "Deep Learning", "PyTorch", "TensorFlow"],
       launchDate: new Date("2018-10-01"),
       source: "GITHUB",
       sourceUrl: "https://github.com/huggingface/transformers",
       sourceId: "github-transformers",
-      likes: 131000,
-      downloads: 20000,
-      author: "huggingface",
+      stars: 131000,
+      upvotes: 131000,
     },
     {
       name: "llama.cpp",
       tagline: "LLM inference in C/C++",
       description: "Port of Facebook's LLaMA model in C/C++ for efficient inference on consumer hardware.",
-      repoUrl: "https://github.com/ggerganov/llama.cpp",
+      website: "https://github.com/ggerganov/llama.cpp",
       logo: "https://avatars.githubusercontent.com/u/1991296",
-      runtime: "C++",
-      license: "MIT",
-      tags: ["LLM", "C++", "Inference", "Llama", "Open Source"],
+      category: "LLM",
+      tags: ["LLM", "C++", "Inference", "Llama"],
       launchDate: new Date("2023-03-01"),
       source: "GITHUB",
       sourceUrl: "https://github.com/ggerganov/llama.cpp",
       sourceId: "github-llamacpp",
-      likes: 65000,
-      downloads: 8000,
-      author: "ggerganov",
+      stars: 65000,
+      upvotes: 65000,
     },
   ];
 }

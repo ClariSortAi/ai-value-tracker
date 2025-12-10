@@ -3,8 +3,6 @@ import { scrapeGitHub } from "./github";
 import { scrapeHackerNews } from "./hacker-news";
 import { scrapeTheresAnAI } from "./theres-an-ai";
 import { scrapeHuggingFaceSpaces } from "./hugging-face";
-import { scrapeTavilyDiscovery } from "./tavily-discovery";
-import { scrapeFutureTools } from "./futuretools";
 import {
   ScraperResult,
   ScrapedOpenSourceTool,
@@ -20,8 +18,6 @@ export {
   scrapeHackerNews,
   scrapeTheresAnAI,
   scrapeHuggingFaceSpaces,
-  scrapeTavilyDiscovery,
-  scrapeFutureTools,
 };
 export type { ScraperResult, ScrapedOpenSourceTool, ScrapedProduct };
 
@@ -37,16 +33,6 @@ const MIN_STARS = 50; // GitHub projects need meaningful star count
 // Calculate quality score based on engagement signals
 function calculateQualityScore(product: ScrapedProduct): number {
   let score = 0;
-  
-  // Source-specific baseline scores for curated commercial sources
-  // These sources don't have engagement metrics but are pre-filtered for quality
-  if (product.source === 'TAVILY') {
-    score += 50; // Tavily results are curated commercial products
-  } else if (product.source === 'MANUAL' || product.source === 'FUTURETOOLS') {
-    score += 60; // FutureTools/Manual entries are hand-curated
-  } else if (product.source === 'THERES_AN_AI') {
-    score += 40; // There's An AI is a commercial directory
-  }
   
   // Upvotes (Product Hunt, HN) - increased weight for strong validation
   if (product.upvotes) {
@@ -238,102 +224,46 @@ function inferTargetRoles(product: ScrapedProduct): string[] {
 }
 
 // Run all scrapers and return combined results
-// GitHub and Hugging Face are now routed to OpenSourceTool table (not commercial Products)
 export async function scrapeAll(): Promise<{
   total: number;
-  commercialCount: number;
-  openSourceCount: number;
   results: {
     productHunt: ScraperResult;
+    github: ScraperResult;
     hackerNews: ScraperResult;
     theresAnAI: ScraperResult;
-    futureTools: ScraperResult;
-    tavilyDiscovery: ScraperResult;
-    // Open source scrapers (GitHub + Hugging Face)
-    github: ScraperResult<ScrapedOpenSourceTool>;
     huggingFace: ScraperResult<ScrapedOpenSourceTool>;
   };
 }> {
   console.log("[Scraper] Starting all scrapers...");
-  console.log("[Scraper] Commercial sources: Product Hunt, Hacker News, There's An AI, FutureTools, Tavily Discovery");
-  console.log("[Scraper] Open source sources: GitHub, Hugging Face");
 
   // Run scrapers in parallel
-  const [productHunt, hackerNews, theresAnAI, futureTools, tavilyDiscovery, github, huggingFace] =
+  const [productHunt, github, hackerNews, theresAnAI, huggingFace] =
     await Promise.all([
       scrapeProductHunt(),
+      scrapeGitHub(),
       scrapeHackerNews(),
       scrapeTheresAnAI(),
-      scrapeFutureTools(),
-      scrapeTavilyDiscovery(),
-      scrapeGitHub(), // Now returns ScrapedOpenSourceTool[]
       scrapeHuggingFaceSpaces(),
     ]);
 
   const results = {
     productHunt,
+    github,
     hackerNews,
     theresAnAI,
-    futureTools,
-    tavilyDiscovery,
-    github,
     huggingFace,
   };
 
-  const commercialCount =
+  const total =
     productHunt.products.length +
+    github.products.length +
     hackerNews.products.length +
     theresAnAI.products.length +
-    futureTools.products.length +
-    tavilyDiscovery.products.length;
-
-  const openSourceCount =
-    github.products.length +
     huggingFace.products.length;
 
-  const total = commercialCount + openSourceCount;
+  console.log(`[Scraper] Total scraped: ${total} products`);
 
-  console.log(`[Scraper] Total scraped: ${total} (commercial: ${commercialCount}, open source: ${openSourceCount})`);
-
-  return { total, commercialCount, openSourceCount, results };
-}
-
-// Run all scrapers and save to appropriate tables
-// Commercial products (Product Hunt, HN, There's An AI, FutureTools, Tavily) → Product table
-// Open source (GitHub, Hugging Face) → OpenSourceTool table
-export async function runAllScrapers(skipGatekeeper: boolean = true): Promise<{
-  commercial: { created: number; updated: number; skipped: number; rejected: number; errors: number };
-  openSource: { created: number; updated: number; skipped: number; errors: number };
-}> {
-  console.log("[Scraper] Running all scrapers with proper routing...");
-  
-  const { results } = await scrapeAll();
-  
-  // Collect commercial products (Product Hunt, Hacker News, There's An AI, FutureTools, Tavily)
-  const commercialProducts: ScrapedProduct[] = [
-    ...results.productHunt.products,
-    ...results.hackerNews.products,
-    ...results.theresAnAI.products,
-    ...results.futureTools.products,
-    ...results.tavilyDiscovery.products,
-  ];
-  
-  // Collect open source tools (GitHub + Hugging Face)
-  const openSourceTools: ScrapedOpenSourceTool[] = [
-    ...results.github.products,
-    ...results.huggingFace.products,
-  ];
-  
-  console.log(`[Scraper] Saving ${commercialProducts.length} commercial products...`);
-  const commercialResult = await saveScrapedProducts(commercialProducts, skipGatekeeper);
-  
-  console.log(`[Scraper] Saving ${openSourceTools.length} open source tools...`);
-  const openSourceResult = await saveOpenSourceTools(openSourceTools, skipGatekeeper);
-  
-  return {
-    commercial: commercialResult,
-    openSource: openSourceResult,
-  };
+  return { total, results };
 }
 
 // Save scraped products to database with quality filtering
@@ -451,7 +381,6 @@ export async function saveScrapedProducts(
               viabilityScore: viability.confidence,
               targetAudience: viability.targetAudience,
               productType: viability.productType,
-              businessCategory: viability.businessCategory,
             } : {}),
             updatedAt: new Date(),
           },
@@ -521,7 +450,6 @@ export async function saveScrapedProducts(
             viabilityScore: viability?.confidence ?? null,
             targetAudience: viability?.targetAudience ?? null,
             productType: viability?.productType ?? null,
-            businessCategory: viability?.businessCategory ?? null,
           },
         });
         created++;

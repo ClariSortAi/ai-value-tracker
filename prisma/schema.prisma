@@ -34,14 +34,12 @@ model Product {
   viabilityScore Float?  @default(0) // AI confidence score (0-1)
   targetAudience String? // 'b2b', 'b2c', 'developer', 'unknown'
   productType    String? // 'saas', 'library', 'framework', 'game', 'tutorial', 'other'
+  businessCategory String? // 'marketing' | 'sales' | 'customer_service' | 'productivity' | 'developer' | 'other'
 
-  // Business category classification (Phase 2)
-  businessCategory String? // 'marketing', 'sales', 'customer_service', 'productivity', 'developer', 'other'
-  
-  // Commercial signals (stronger indicators of real SaaS)
-  hasPricingPage    Boolean @default(false)
-  hasTeamPage       Boolean @default(false)
-  hasTermsOfService Boolean @default(false)
+  // Commercial signals
+  hasPricingPage    Boolean    @default(false)
+  hasTeamPage       Boolean    @default(false)
+  hasTermsOfService Boolean    @default(false)
 
   // AI-Enriched product data (Track B enhancement)
   extendedDescription String?  // AI-generated 2-3 paragraph description
@@ -63,7 +61,6 @@ model Product {
   @@index([targetAudience])
   @@index([productType])
   @@index([enrichedAt])
-  @@index([businessCategory])
 }
 
 model Score {
@@ -114,6 +111,7 @@ model OpenSourceTool {
   viabilityScore Float?  @default(0)
   targetAudience String?
   productType    String?
+  businessCategory String?
 
   // AI-Enriched product data (Track B enhancement - parity with Product)
   extendedDescription String?  // AI-generated 2-3 paragraph description

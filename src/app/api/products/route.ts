@@ -6,7 +6,6 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get("search") || "";
     const category = searchParams.get("category") || "";
-    const businessCategory = searchParams.get("businessCategory") || ""; // NEW: marketing, sales, customer_service, productivity
     const role = searchParams.get("role") || "";
     const sortBy = searchParams.get("sortBy") || "date"; // Default to newest first
     const limit = parseInt(searchParams.get("limit") || "50");
@@ -43,14 +42,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filter by category (legacy)
+    // Filter by category
     if (category) {
       filteredProducts = filteredProducts.filter((p) => p.category === category);
-    }
-
-    // Filter by businessCategory (new prioritized filter)
-    if (businessCategory && businessCategory !== "all") {
-      filteredProducts = filteredProducts.filter((p) => p.businessCategory === businessCategory);
     }
 
     // Filter by role (if not "all")
@@ -82,28 +76,11 @@ export async function GET(request: NextRequest) {
 
     // Get unique categories for filters
     const categories = [...new Set(products.map((p) => p.category).filter(Boolean))];
-    
-    // Get business category counts for filter chips
-    const businessCategories: Record<string, number> = {
-      marketing: 0,
-      sales: 0,
-      customer_service: 0,
-      productivity: 0,
-      developer: 0,
-      other: 0,
-    };
-    products.forEach((p) => {
-      const cat = p.businessCategory || "other";
-      if (cat in businessCategories) {
-        businessCategories[cat]++;
-      }
-    });
 
     return NextResponse.json({
       products: paginatedProducts,
       total,
       categories,
-      businessCategories,
     });
   } catch (error) {
     console.error("Error fetching products:", error);

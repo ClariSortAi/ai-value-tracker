@@ -7,6 +7,7 @@ export type Source =
   | "REDDIT"
   | "MANUAL"
   | "TAVILY"
+  | "TAVILY_LIVE"
   | "FUTURETOOLS";
 
 export interface ScrapedProduct {

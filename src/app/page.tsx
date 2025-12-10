@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Sparkles, TrendingUp, RefreshCw, Database, Wand2 } from "lucide-react";
+import { Search, Sparkles, TrendingUp, RefreshCw, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { DiscoverySearch } from "@/components/discovery-search";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
 import { OpenSourceCard } from "@/components/open-source-card";
 import { AdminControls } from "@/components/admin-controls";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FeaturedCard } from "@/components/featured-card";
-import { CategoryFilter } from "@/components/category-filter";
-import { DiscoverySearch } from "@/components/discovery-search";
 
 interface Product {
   id: string;
@@ -55,13 +54,10 @@ export default function DiscoverPage() {
   const [loadingOpenSource, setLoadingOpenSource] = useState(true);
   const [search, setSearch] = useState("");
   const [activeRole, setActiveRole] = useState("all");
-  const [activeCategory, setActiveCategory] = useState("all");
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [totalProducts, setTotalProducts] = useState(0);
-  const [showDiscovery, setShowDiscovery] = useState(false);
 
-  const fetchProducts = useCallback(async (searchQuery: string, role: string, category: string) => {
+  const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -71,17 +67,11 @@ export default function DiscoverPage() {
       
       if (searchQuery) params.set("search", searchQuery);
       if (role && role !== "all") params.set("role", role);
-      if (category && category !== "all") params.set("businessCategory", category);
 
       const res = await fetch(`/api/products?${params}`);
       const data = await res.json();
       setProducts(data.products || []);
       setTotalProducts(data.total || data.products?.length || 0);
-      
-      // Update category counts (only on initial load or when not filtered by category)
-      if (data.businessCategories && (!category || category === "all")) {
-        setCategoryCounts(data.businessCategories);
-      }
     } catch (error) {
       console.error("Failed to fetch products:", error);
     } finally {
@@ -117,7 +107,7 @@ export default function DiscoverPage() {
 
   // Initial load
   useEffect(() => {
-    fetchProducts("", "all", "all");
+    fetchProducts("", "all");
     fetchOpenSource();
     fetchFeatured();
   }, [fetchProducts, fetchOpenSource, fetchFeatured]);
@@ -129,7 +119,7 @@ export default function DiscoverPage() {
     if (searchTimeout) clearTimeout(searchTimeout);
     
     const timeout = setTimeout(() => {
-      fetchProducts(value, activeRole, activeCategory);
+      fetchProducts(value, activeRole);
     }, 300);
     
     setSearchTimeout(timeout);
@@ -138,13 +128,7 @@ export default function DiscoverPage() {
   // Handle role change
   const handleRoleChange = (role: string) => {
     setActiveRole(role);
-    fetchProducts(search, role, activeCategory);
-  };
-
-  // Handle category change
-  const handleCategoryChange = (category: string) => {
-    setActiveCategory(category);
-    fetchProducts(search, activeRole, category);
+    fetchProducts(search, role);
   };
 
   return (
@@ -163,36 +147,9 @@ export default function DiscoverPage() {
               Rising Stars in AI Tools
             </h1>
             
-            <p className="text-lg md:text-xl text-white/80 max-w-2xl mx-auto mb-8 leading-relaxed">
-              We surface quality AI products gaining real traction. Not enterprise giants. 
-              Not weekend experiments. The promising middle ground that deserves your attention.
-            </p>
-            
-            {/* AI Discovery CTA */}
-            <div className="max-w-xl mx-auto mb-6">
-              <button
-                onClick={() => setShowDiscovery(!showDiscovery)}
-                className={`w-full px-6 py-4 text-lg font-medium rounded-2xl transition-all flex items-center justify-center gap-3 ${
-                  showDiscovery
-                    ? "bg-white text-violet-600 shadow-xl"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 shadow-lg shadow-violet-500/30"
-                }`}
-              >
-                <Wand2 className="w-5 h-5" />
-                {showDiscovery ? "Hide AI Discovery" : "Tell me what you need →"}
-              </button>
-            </div>
-            
-            {/* Quick Search Bar */}
-            <div className="max-w-xl mx-auto relative">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)] pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Or search AI tools by name..."
-                value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="w-full pl-14 pr-6 py-4 text-base"
-              />
+            {/* AI Discovery Search */}
+            <div className="mb-12">
+              <DiscoverySearch />
             </div>
             
             {/* Trust indicators */}
@@ -214,47 +171,10 @@ export default function DiscoverPage() {
         </div>
       </section>
 
-      {/* AI Discovery Section */}
-      <AnimatePresence>
-        {showDiscovery && (
-          <motion.section
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-hidden"
-          >
-            <div className="container-wide py-12">
-              <DiscoverySearch />
-            </div>
-          </motion.section>
-        )}
-      </AnimatePresence>
-
       {/* Admin Controls - Collapsible */}
       <section className="py-4 border-b border-[var(--card-border)]">
         <div className="container-wide">
           <AdminControls />
-        </div>
-      </section>
-
-      {/* Category Filter */}
-      <section className="py-4 border-b border-[var(--card-border)]">
-        <div className="container-wide">
-          <FadeIn delay={0.1}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-medium text-[var(--foreground-muted)] mb-2">
-                  Filter by Business Category
-                </h3>
-                <CategoryFilter
-                  activeCategory={activeCategory}
-                  onCategoryChange={handleCategoryChange}
-                  counts={categoryCounts}
-                />
-              </div>
-            </div>
-          </FadeIn>
         </div>
       </section>
 
@@ -320,7 +240,7 @@ export default function DiscoverPage() {
         <div className="container-wide">
           {/* Section header */}
           <FadeIn delay={0.1}>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
               <div>
                 <h2 className="text-xl font-semibold text-[var(--foreground)]">
                   {activeRole === "all" ? "All Tools" : `Tools for ${activeRole}`}
@@ -332,9 +252,24 @@ export default function DiscoverPage() {
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[var(--foreground-subtle)]" />
-                <span className="text-sm text-[var(--foreground-subtle)]">Sorted by newest</span>
+              
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center w-full md:w-auto">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder="Filter by name..."
+                    value={search}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 text-sm bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg focus:border-[var(--brand-primary)] focus:ring-2 focus:ring-[var(--brand-primary-light)]/20 transition-all outline-none"
+                  />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--foreground-subtle)] pointer-events-none" />
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <TrendingUp className="w-4 h-4 text-[var(--foreground-subtle)]" />
+                  <span className="text-sm text-[var(--foreground-subtle)]">Sorted by newest</span>
+                </div>
               </div>
             </div>
           </FadeIn>
@@ -412,13 +347,13 @@ export default function DiscoverPage() {
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <p className="text-xs font-medium text-[var(--accent)] uppercase tracking-wider mb-1">
-                  GitHub + Hugging Face
+                  Hugging Face Spaces
                 </p>
                 <h2 className="text-xl font-semibold text-[var(--foreground)]">
                   Open Source Spotlight
                 </h2>
                 <p className="text-sm text-[var(--foreground-muted)] mt-1">
-                  Quality open-source AI tools from GitHub and Hugging Face, ranked with the same scoring system.
+                  Quality open-source AI tools, ranked with the same scoring system.
                 </p>
               </div>
             </div>
