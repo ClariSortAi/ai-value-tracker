@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Sparkles, TrendingUp, RefreshCw, Database } from "lucide-react";
+import { Search, Sparkles, TrendingUp, RefreshCw, Database, Wand2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
@@ -10,6 +10,7 @@ import { AdminControls } from "@/components/admin-controls";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FeaturedCard } from "@/components/featured-card";
 import { CategoryFilter } from "@/components/category-filter";
+import { DiscoverySearch } from "@/components/discovery-search";
 
 interface Product {
   id: string;
@@ -58,6 +59,7 @@ export default function DiscoverPage() {
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [totalProducts, setTotalProducts] = useState(0);
+  const [showDiscovery, setShowDiscovery] = useState(false);
 
   const fetchProducts = useCallback(async (searchQuery: string, role: string, category: string) => {
     setLoading(true);
@@ -166,12 +168,27 @@ export default function DiscoverPage() {
               Not weekend experiments. The promising middle ground that deserves your attention.
             </p>
             
-            {/* Search Bar */}
+            {/* AI Discovery CTA */}
+            <div className="max-w-xl mx-auto mb-6">
+              <button
+                onClick={() => setShowDiscovery(!showDiscovery)}
+                className={`w-full px-6 py-4 text-lg font-medium rounded-2xl transition-all flex items-center justify-center gap-3 ${
+                  showDiscovery
+                    ? "bg-white text-violet-600 shadow-xl"
+                    : "bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white hover:from-violet-600 hover:to-fuchsia-600 shadow-lg shadow-violet-500/30"
+                }`}
+              >
+                <Wand2 className="w-5 h-5" />
+                {showDiscovery ? "Hide AI Discovery" : "Tell me what you need →"}
+              </button>
+            </div>
+            
+            {/* Quick Search Bar */}
             <div className="max-w-xl mx-auto relative">
               <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)] pointer-events-none" />
               <input
                 type="text"
-                placeholder="Search AI tools..."
+                placeholder="Or search AI tools by name..."
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 className="w-full pl-14 pr-6 py-4 text-base"
@@ -196,6 +213,23 @@ export default function DiscoverPage() {
           </div>
         </div>
       </section>
+
+      {/* AI Discovery Section */}
+      <AnimatePresence>
+        {showDiscovery && (
+          <motion.section
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-hidden"
+          >
+            <div className="container-wide py-12">
+              <DiscoverySearch />
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {/* Admin Controls - Collapsible */}
       <section className="py-4 border-b border-[var(--card-border)]">
