@@ -35,6 +35,14 @@ model Product {
   targetAudience String? // 'b2b', 'b2c', 'developer', 'unknown'
   productType    String? // 'saas', 'library', 'framework', 'game', 'tutorial', 'other'
 
+  // Business category classification (Phase 2)
+  businessCategory String? // 'marketing', 'sales', 'customer_service', 'productivity', 'developer', 'other'
+  
+  // Commercial signals (stronger indicators of real SaaS)
+  hasPricingPage    Boolean @default(false)
+  hasTeamPage       Boolean @default(false)
+  hasTermsOfService Boolean @default(false)
+
   // AI-Enriched product data (Track B enhancement)
   extendedDescription String?  // AI-generated 2-3 paragraph description
   keyFeatures         String   @default("[]") // JSON array of key features
@@ -55,6 +63,7 @@ model Product {
   @@index([targetAudience])
   @@index([productType])
   @@index([enrichedAt])
+  @@index([businessCategory])
 }
 
 model Score {

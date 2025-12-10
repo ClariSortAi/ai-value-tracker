@@ -4,10 +4,13 @@ import { ScrapedProduct } from "@/lib/scrapers/types";
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+export type BusinessCategory = "marketing" | "sales" | "customer_service" | "productivity" | "developer" | "other";
+
 export interface ViabilityAssessment {
   isCommercialSaaS: boolean;
   targetAudience: "b2b" | "b2c" | "developer" | "unknown";
   productType: "saas" | "library" | "framework" | "game" | "tutorial" | "exam_prep" | "student_tool" | "other";
+  businessCategory: BusinessCategory;
   confidence: number;
   rejectionReason?: string;
 }
@@ -17,9 +20,18 @@ const GATEKEEPER_PROMPT = `You are an EXTREMELY STRICT B2B SaaS product classifi
 ## OUR MISSION
 We surface MID-MARKET RISING STARS - quality AI products gaining real traction. NOT enterprise giants. NOT weekend experiments. Products that deserve attention because they solve real business problems.
 
-## ACCEPT ONLY if the product:
+## STEP 1: BUSINESS CATEGORY CLASSIFICATION
+Classify this product into ONE of these business categories:
+- marketing: Content creation, SEO, social media, ads, email marketing, brand tools
+- sales: CRM, lead generation, outreach, prospecting, sales intelligence, revenue tools
+- customer_service: Support chatbots, helpdesk, ticket routing, customer success tools
+- productivity: Workflow automation, document processing, meeting assistants, task management
+- developer: If primarily for engineers/developers (usually REJECT unless has clear SaaS model)
+- other: If doesn't fit above categories (usually REJECT)
+
+## STEP 2: ACCEPT ONLY if the product:
 1. Is a COMMERCIAL SaaS product (has pricing, free trial, or clear business model)
-2. Targets BUSINESS PROFESSIONALS (Sales, Marketing, Ops, HR, Product, Finance teams)
+2. Has businessCategory of marketing, sales, customer_service, or productivity
 3. Shows COMMERCIAL INTENT: has dedicated website with About/Team, Pricing, or Terms pages
 4. Provides REAL BUSINESS VALUE - solves a workflow problem, not just a tech demo
 5. Is AI-POWERED but focused on BUSINESS OUTCOMES, not just "uses AI"
@@ -79,11 +91,12 @@ Website: {website}
   "isCommercialSaaS": <true/false>,
   "targetAudience": "<b2b|b2c|developer|unknown>",
   "productType": "<saas|library|framework|game|tutorial|exam_prep|student_tool|other>",
+  "businessCategory": "<marketing|sales|customer_service|productivity|developer|other>",
   "confidence": <0.0-1.0>,
   "rejectionReason": "<specific reason if rejected, null if accepted>"
 }
 
-BE EXTREMELY STRICT. When in doubt, REJECT. We only want products that a VP of Marketing, Sales Director, or Operations Manager would actually consider using.`;
+BE EXTREMELY STRICT. When in doubt, REJECT. We prioritize marketing, sales, customer_service, and productivity tools. Developer tools need exceptional commercial signals to pass.`;
 
 export async function assessCommercialViability(
   product: ScrapedProduct
@@ -122,6 +135,7 @@ export async function assessCommercialViability(
       isCommercialSaaS: Boolean(parsed.isCommercialSaaS),
       targetAudience: parsed.targetAudience || "unknown",
       productType: parsed.productType || "other",
+      businessCategory: parsed.businessCategory || "other",
       confidence: Math.max(0, Math.min(1, parsed.confidence || 0.5)),
       rejectionReason: parsed.rejectionReason || undefined,
     };
@@ -177,9 +191,52 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
         isCommercialSaaS: false,
         targetAudience: "unknown",
         productType: type as ViabilityAssessment["productType"],
+        businessCategory: "other",
         confidence: 0.8,
         rejectionReason: reason,
       };
+    }
+  }
+
+  // Business category classification based on keywords
+  const categoryPatterns: { category: BusinessCategory; patterns: RegExp[] }[] = [
+    {
+      category: "marketing",
+      patterns: [
+        /\b(marketing|seo|content|copywriting|social media|ads|advertising|email marketing|campaign|brand|influencer|content creation)\b/i,
+      ],
+    },
+    {
+      category: "sales",
+      patterns: [
+        /\b(sales|crm|lead gen|outreach|prospecting|pipeline|deal|revenue|cold email|sales intelligence)\b/i,
+      ],
+    },
+    {
+      category: "customer_service",
+      patterns: [
+        /\b(customer service|support|helpdesk|ticket|customer success|chatbot|live chat|contact center)\b/i,
+      ],
+    },
+    {
+      category: "productivity",
+      patterns: [
+        /\b(productivity|workflow|automation|document|meeting|task|project management|scheduling|calendar|note|collaboration)\b/i,
+      ],
+    },
+    {
+      category: "developer",
+      patterns: [
+        /\b(developer|code|programming|ide|cli|terminal|github|npm|api|sdk|devops|backend|frontend)\b/i,
+      ],
+    },
+  ];
+
+  let detectedCategory: BusinessCategory = "other";
+  for (const { category, patterns } of categoryPatterns) {
+    if (patterns.some((p) => p.test(text))) {
+      detectedCategory = category;
+      break;
     }
   }
 
@@ -195,8 +252,7 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
   const b2bScore = b2bSignals.filter(p => p.test(text)).length;
 
   // Developer tools (allowed but different audience)
-  const devSignals = /developer|code|programming|ide|cli|terminal|github|npm/i;
-  const isDeveloperTool = devSignals.test(text);
+  const isDeveloperTool = detectedCategory === "developer";
 
   // Must have a website to be considered commercial
   if (!product.website) {
@@ -204,18 +260,21 @@ function ruleBasedAssessment(product: ScrapedProduct): ViabilityAssessment {
       isCommercialSaaS: false,
       targetAudience: "unknown",
       productType: "other",
+      businessCategory: detectedCategory,
       confidence: 0.6,
       rejectionReason: "No website provided",
     };
   }
 
-  // Determine if it passes
-  const isCommercialSaaS = b2bScore >= 2 || (product.source === "PRODUCT_HUNT" && b2bScore >= 1);
+  // Determine if it passes - prioritize marketing, sales, customer_service, productivity
+  const isPriorityCategory = ["marketing", "sales", "customer_service", "productivity"].includes(detectedCategory);
+  const isCommercialSaaS = (isPriorityCategory && b2bScore >= 1) || b2bScore >= 2 || (product.source === "PRODUCT_HUNT" && b2bScore >= 1);
   
   return {
     isCommercialSaaS,
     targetAudience: isDeveloperTool ? "developer" : (isCommercialSaaS ? "b2b" : "unknown"),
     productType: isCommercialSaaS ? "saas" : "other",
+    businessCategory: detectedCategory,
     confidence: 0.5,
     rejectionReason: isCommercialSaaS ? undefined : "Insufficient B2B signals",
   };

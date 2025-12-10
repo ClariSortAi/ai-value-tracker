@@ -9,6 +9,7 @@ import { OpenSourceCard } from "@/components/open-source-card";
 import { AdminControls } from "@/components/admin-controls";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FeaturedCard } from "@/components/featured-card";
+import { CategoryFilter } from "@/components/category-filter";
 
 interface Product {
   id: string;
@@ -53,10 +54,12 @@ export default function DiscoverPage() {
   const [loadingOpenSource, setLoadingOpenSource] = useState(true);
   const [search, setSearch] = useState("");
   const [activeRole, setActiveRole] = useState("all");
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
   const [totalProducts, setTotalProducts] = useState(0);
 
-  const fetchProducts = useCallback(async (searchQuery: string, role: string) => {
+  const fetchProducts = useCallback(async (searchQuery: string, role: string, category: string) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -66,11 +69,17 @@ export default function DiscoverPage() {
       
       if (searchQuery) params.set("search", searchQuery);
       if (role && role !== "all") params.set("role", role);
+      if (category && category !== "all") params.set("businessCategory", category);
 
       const res = await fetch(`/api/products?${params}`);
       const data = await res.json();
       setProducts(data.products || []);
       setTotalProducts(data.total || data.products?.length || 0);
+      
+      // Update category counts (only on initial load or when not filtered by category)
+      if (data.businessCategories && (!category || category === "all")) {
+        setCategoryCounts(data.businessCategories);
+      }
     } catch (error) {
       console.error("Failed to fetch products:", error);
     } finally {
@@ -106,7 +115,7 @@ export default function DiscoverPage() {
 
   // Initial load
   useEffect(() => {
-    fetchProducts("", "all");
+    fetchProducts("", "all", "all");
     fetchOpenSource();
     fetchFeatured();
   }, [fetchProducts, fetchOpenSource, fetchFeatured]);
@@ -118,7 +127,7 @@ export default function DiscoverPage() {
     if (searchTimeout) clearTimeout(searchTimeout);
     
     const timeout = setTimeout(() => {
-      fetchProducts(value, activeRole);
+      fetchProducts(value, activeRole, activeCategory);
     }, 300);
     
     setSearchTimeout(timeout);
@@ -127,7 +136,13 @@ export default function DiscoverPage() {
   // Handle role change
   const handleRoleChange = (role: string) => {
     setActiveRole(role);
-    fetchProducts(search, role);
+    fetchProducts(search, role, activeCategory);
+  };
+
+  // Handle category change
+  const handleCategoryChange = (category: string) => {
+    setActiveCategory(category);
+    fetchProducts(search, activeRole, category);
   };
 
   return (
@@ -186,6 +201,26 @@ export default function DiscoverPage() {
       <section className="py-4 border-b border-[var(--card-border)]">
         <div className="container-wide">
           <AdminControls />
+        </div>
+      </section>
+
+      {/* Category Filter */}
+      <section className="py-4 border-b border-[var(--card-border)]">
+        <div className="container-wide">
+          <FadeIn delay={0.1}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-[var(--foreground-muted)] mb-2">
+                  Filter by Business Category
+                </h3>
+                <CategoryFilter
+                  activeCategory={activeCategory}
+                  onCategoryChange={handleCategoryChange}
+                  counts={categoryCounts}
+                />
+              </div>
+            </div>
+          </FadeIn>
         </div>
       </section>
 
@@ -343,13 +378,13 @@ export default function DiscoverPage() {
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
                 <p className="text-xs font-medium text-[var(--accent)] uppercase tracking-wider mb-1">
-                  Hugging Face Spaces
+                  GitHub + Hugging Face
                 </p>
                 <h2 className="text-xl font-semibold text-[var(--foreground)]">
                   Open Source Spotlight
                 </h2>
                 <p className="text-sm text-[var(--foreground-muted)] mt-1">
-                  Quality open-source AI tools, ranked with the same scoring system.
+                  Quality open-source AI tools from GitHub and Hugging Face, ranked with the same scoring system.
                 </p>
               </div>
             </div>

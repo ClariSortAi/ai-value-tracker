@@ -182,13 +182,14 @@ export async function GET(request: NextRequest) {
           });
           console.log(`[Assess] REJECTED: ${product.name} - ${viability.rejectionReason}`, { requestId });
         } else {
-          // Update the product with viability data
+          // Update the product with viability data including businessCategory
           await prisma.product.update({
             where: { id: product.id },
             data: {
               viabilityScore: viability.confidence,
               targetAudience: viability.targetAudience,
               productType: viability.productType,
+              businessCategory: viability.businessCategory,
             },
           });
           results.assessed++;
@@ -196,7 +197,7 @@ export async function GET(request: NextRequest) {
             name: product.name,
             status: "assessed",
           });
-          console.log(`[Assess] APPROVED: ${product.name} (confidence: ${viability.confidence})`, { requestId });
+          console.log(`[Assess] APPROVED: ${product.name} (confidence: ${viability.confidence}, category: ${viability.businessCategory})`, { requestId });
         }
 
         processedCount++;
