@@ -1,21 +1,87 @@
 # AI Value Tracker
 
-A transparent, evidence-based scoring system to discover and evaluate AI products. Cut through the noise of daily AI launches and find solutions that deliver real value.
+A transparent, evidence-based scoring system to discover and evaluate **commercial B2B AI SaaS products**. Cut through the noise of daily AI launches and find solutions that deliver real business value.
 
 ![AI Value Tracker](https://img.shields.io/badge/Next.js-15-black?style=flat-square&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat-square&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?style=flat-square&logo=tailwind-css)
 ![Prisma](https://img.shields.io/badge/Prisma-5-2D3748?style=flat-square&logo=prisma)
 
-## Features
+## 🎯 Project Focus
 
-- **Multi-Source Data Collection**: Product Hunt, GitHub (10k+ stars dev tools), Hacker News, There's An AI
-- **Two-Stage Quality Gate**: Rule filters + AI gatekeeper (Gemini) for commercial B2B relevance
-- **AI-Powered Scoring**: Gemini evaluates products across 6 dimensions; stored in Neon Postgres
-- **On-Demand Controls**: Run Scrape → Assess (gatekeeper) → Score from the UI or via `/api/admin/run`
-- **Transparent Methodology**: ISO/IEC 25010-inspired scoring; signals (upvotes/stars/comments) shown in detail view
-- **Polished UI**: Granite-inspired palette, spacing, chips/score pills, at-a-glance panel, signals, use-cases; mobile friendly
-- **Free to Run**: Fits Vercel free tier + Neon (0.5 GB) with lean payloads
+This tracker focuses on **commercial B2B SaaS products** organized by business function:
+
+| Category | Focus | Examples |
+|----------|-------|----------|
+| **Marketing** | Content, SEO, social, email | Jasper, Copy.ai, Surfer SEO |
+| **Sales** | CRM, intelligence, outreach | Gong, Apollo.io, Outreach |
+| **Customer Service** | Support, helpdesk, chatbots | Zendesk AI, Intercom, Freshdesk |
+| **Productivity** | Meetings, workflows, docs | Otter.ai, Fireflies.ai, n8n |
+| **Developer** | Code, APIs, DevOps | Cursor, v0 by Vercel |
+
+**Open Source tools** (GitHub, Hugging Face) are displayed in a separate "Open Source Spotlight" section.
+
+## ✅ Current Status (December 2024)
+
+### Data Pipeline
+
+| Source | Status | Output | Notes |
+|--------|--------|--------|-------|
+| **Product Hunt** | ✅ Working | Product table | Primary source, good quality |
+| **Tavily Discovery** | ✅ Working | Product table | AI-powered commercial search |
+| **FutureTools** | ⚠️ Demo data | Product table | 13 curated products, needs live scraping |
+| **There's An AI** | ✅ Working | Product table | AI directory |
+| **GitHub** | ✅ Working | OpenSourceTool | 10K+ star repos |
+| **Hugging Face** | ✅ Working | OpenSourceTool | Popular Spaces |
+| **Hacker News** | ✅ Working | Product table | Heavily filtered for quality |
+
+### AI Gatekeeper
+
+- ✅ Classifies products into `businessCategory` (marketing, sales, customer_service, productivity, developer, other)
+- ✅ Detects commercial signals (pricing page, team page, terms of service)
+- ✅ Rejects non-commercial items (blog posts, listicles, tutorials, libraries)
+- ✅ Powered by Gemini AI
+
+### Database State
+
+- **29 Products** across all business categories
+- **150 Open Source Tools** from GitHub + Hugging Face
+- Categories populated: productivity (10), sales (6), customer_service (6), marketing (4), developer (2)
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATA SOURCES                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Commercial SaaS                    │  Open Source               │
+│  ├─ Product Hunt                    │  ├─ GitHub (10K+ stars)   │
+│  ├─ Tavily Search API               │  └─ Hugging Face Spaces   │
+│  ├─ FutureTools (demo)              │                            │
+│  ├─ There's An AI                   │                            │
+│  └─ Hacker News (filtered)          │                            │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      QUALITY PIPELINE                            │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Rule-Based Filter (engagement, domains, keywords)            │
+│  2. AI Gatekeeper (Gemini) - commercial viability + category     │
+│  3. Quality Scoring (viability score 0-1)                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        DATABASE                                  │
+├─────────────────────────────────────────────────────────────────┤
+│  Product Table              │  OpenSourceTool Table             │
+│  ├─ businessCategory        │  ├─ likes, downloads              │
+│  ├─ viabilityScore          │  ├─ source (GITHUB/HUGGING_FACE)  │
+│  ├─ hasPricingPage          │  └─ viabilityScore                │
+│  └─ source (PH/TAVILY/etc)  │                                    │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Scoring Categories
 
@@ -33,9 +99,10 @@ A transparent, evidence-based scoring system to discover and evaluate AI product
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4
-- **Database**: SQLite (dev) / Neon Postgres (prod)
+- **Database**: Neon Postgres (production)
 - **ORM**: Prisma 5
-- **AI**: Google Gemini
+- **AI**: Google Gemini (gatekeeper + scoring)
+- **Search**: Tavily API (commercial discovery)
 - **Charts**: Recharts
 - **Deployment**: Vercel
 
@@ -74,13 +141,16 @@ npm run dev
 Create a `.env.local` file with:
 
 ```env
-# Database (SQLite for local dev)
-DATABASE_URL="file:./prisma/dev.db"
+# Database (Neon PostgreSQL)
+DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
 
-# Google Gemini API (optional for dev - uses fallback scoring)
+# Google Gemini API (required for gatekeeper + scoring)
 GEMINI_API_KEY="your-gemini-api-key"
 
-# Product Hunt API (optional - uses demo data if not set)
+# Tavily API (required for commercial discovery)
+TAVILY_API_KEY="your-tavily-api-key"
+
+# Product Hunt API (optional - improves results)
 PRODUCT_HUNT_API_TOKEN="your-product-hunt-token"
 
 # GitHub API (optional - improves rate limits)
@@ -89,7 +159,7 @@ GITHUB_TOKEN="your-github-token"
 # Cron job protection (for production)
 CRON_SECRET="your-secret-key"
 
-# Optional: if using Vercel Deployment Protection
+# Optional: Vercel Deployment Protection bypass
 VERCEL_AUTOMATION_BYPASS_SECRET="your-bypass-token"
 ```
 
@@ -102,81 +172,47 @@ npm run db:studio    # Open Prisma Studio
 npm run db:reset     # Reset and reseed database
 ```
 
-## Project Structure
+### Running the Pipeline Locally
 
+```bash
+# Run full pipeline (scrape + assess)
+npx tsx scripts/run-pipeline.ts
+
+# Ensure env vars are set first
+$env:DATABASE_URL = "your-connection-string"
+$env:GEMINI_API_KEY = "your-key"
+$env:TAVILY_API_KEY = "your-key"
 ```
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── products/       # Products REST API
-│   │   │   ├── scrape/         # Scraping cron/on-demand
-│   │   │   ├── assess/         # AI gatekeeper viability batch
-│   │   │   ├── score/          # Scoring batch
-│   │   │   └── admin/run/      # Server-side trigger for scrape/assess/score
-│   │   ├── products/           # Products list & detail pages
-│   │   ├── compare/            # Comparison tool
-│   │   ├── about/              # Methodology page
-│   │   └── page.tsx            # Landing page (search, run controls)
-│   ├── components/
-│   │   ├── ui/                 # Base UI components
-│   │   ├── tool-card.tsx       # Product card (spacing/chips/score)
-│   │   ├── product-card.tsx    # Legacy/compare card
-│   │   ├── score-badge.tsx     # Score visualization
-│   │   └── score-radar.tsx     # Radar chart component
-│   └── lib/
-│       ├── scrapers/           # Data source scrapers + gatekeeper integration
-│       ├── ai/                 # Gemini scoring logic & gatekeeper
-│       ├── db.ts               # Prisma client
-│       └── utils.ts            # Utility functions
-├── prisma/
-│   ├── schema.prisma           # Database schema
-│   └── seed.ts                 # Seed script
-└── vercel.json                 # Vercel cron configuration
-```
-
-## Deployment
-
-### Vercel (Recommended)
-
-1. Push to GitHub
-2. Import to Vercel
-3. Add environment variables:
-   - `DATABASE_URL` - Neon Postgres connection string
-   - `GEMINI_API_KEY` - Google Gemini API key
-   - `CRON_SECRET` - Secret for cron job authentication
-4. Deploy!
-
-### Production Database (Neon)
-
-1. Create a free Neon project at [neon.tech](https://neon.tech)
-2. Update `prisma/schema.prisma`:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. Update environment variables with Neon connection string
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/products` | GET | List products with filters |
+| `/api/products` | GET | List products with filters (businessCategory, role, search) |
 | `/api/products/[slug]` | GET | Get product details |
-| `/api/scrape` | GET/POST | Trigger scraping job (fast mode saves unassessed) |
-| `/api/assess` | GET/POST | AI gatekeeper batch viability assessment |
-| `/api/score` | GET/POST | Score pending products or a specific product |
-| `/api/admin/run` | POST | `{ action: "scrape" | "assess" | "score" }` server-side trigger |
+| `/api/open-source` | GET | List open source tools |
+| `/api/scrape` | GET/POST | Trigger scraping job |
+| `/api/assess` | GET/POST | AI gatekeeper batch assessment |
+| `/api/score` | GET/POST | Score pending products |
+| `/api/admin/run` | POST | Server-side trigger for pipeline |
 
 ## Cron Jobs
 
 Configured in `vercel.json`:
 
 - **Scraping**: Sunday 06:00 UTC (`/api/scrape`)
+- **Assessment**: Sunday 07:00 UTC (`/api/assess`)
 - **Scoring**: Sunday 08:00 UTC (`/api/score`)
 
-If using Vercel Deployment Protection, add unprotected paths for these routes or send `x-vercel-protection-bypass` from your scheduler with `VERCEL_AUTOMATION_BYPASS_SECRET`.
+## 🗺️ Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for the detailed development roadmap.
+
+**Next priorities:**
+1. Live FutureTools scraping (replace demo data)
+2. G2/Capterra integration for review data
+3. Enhanced enrichment with company data
+4. User accounts and saved products
 
 ## Contributing
 
@@ -189,5 +225,5 @@ MIT License - feel free to use this project for any purpose.
 ## Acknowledgments
 
 - Methodology based on [ISO/IEC 25010](https://www.iso.org/standard/35733.html)
-- Design inspired by Apple and OpenAI
+- Commercial discovery powered by [Tavily](https://tavily.com)
 - Built with [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com), and [Vercel](https://vercel.com)

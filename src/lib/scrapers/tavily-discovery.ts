@@ -179,7 +179,7 @@ async function searchTavily(query: string, category: string): Promise<ScrapedPro
         category: mapCategoryToDisplay(category),
         tags: [category.replace("_", " "), "AI", "SaaS"],
         launchDate: new Date(), // Use current date as discovery date
-        source: "THERES_AN_AI", // Use existing source type for now
+        source: "TAVILY",
         sourceUrl: result.url,
         sourceId: `tavily-${Buffer.from(result.url).toString("base64").slice(0, 20)}`,
         upvotes: isPriorityDomain(result.url) ? 50 : 20, // Give priority domains a boost

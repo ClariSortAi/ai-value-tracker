@@ -5,7 +5,9 @@ export type Source =
   | "THERES_AN_AI"
   | "HUGGING_FACE"
   | "REDDIT"
-  | "MANUAL";
+  | "MANUAL"
+  | "TAVILY"
+  | "FUTURETOOLS";
 
 export interface ScrapedProduct {
   name: string;

@@ -38,6 +38,16 @@ const MIN_STARS = 50; // GitHub projects need meaningful star count
 function calculateQualityScore(product: ScrapedProduct): number {
   let score = 0;
   
+  // Source-specific baseline scores for curated commercial sources
+  // These sources don't have engagement metrics but are pre-filtered for quality
+  if (product.source === 'TAVILY') {
+    score += 50; // Tavily results are curated commercial products
+  } else if (product.source === 'MANUAL' || product.source === 'FUTURETOOLS') {
+    score += 60; // FutureTools/Manual entries are hand-curated
+  } else if (product.source === 'THERES_AN_AI') {
+    score += 40; // There's An AI is a commercial directory
+  }
+  
   // Upvotes (Product Hunt, HN) - increased weight for strong validation
   if (product.upvotes) {
     if (product.upvotes >= 1000) score += 60; // Viral products
