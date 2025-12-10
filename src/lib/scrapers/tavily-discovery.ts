@@ -68,6 +68,41 @@ const EXCLUDED_DOMAINS = [
   "capterra.com", // Review site
   "producthunt.com", // Already scraping this
   "theres-an-ai.com", // Already scraping this
+  "technologyadvice.com", // Blog/comparison site
+  "hiverhq.com", // Their /blog/ articles
+  "domo.com", // Their /learn/ articles
+  "fritz.ai", // Blog site
+  "zapier.com/blog", // Blog content
+  "hubspot.com/blog", // Blog content
+  "blog.", // Any blog subdomain
+];
+
+// URL paths that indicate blog/article content (not products)
+const BLOG_URL_PATTERNS = [
+  /\/blog\//i,
+  /\/article\//i,
+  /\/learn\//i,
+  /\/resources?\//i,
+  /\/guide\//i,
+  /\/comparison\//i,
+  /\/best-/i,
+  /\/top-\d+/i,
+  /\/review\//i,
+  /\/news\//i,
+];
+
+// Title patterns that indicate listicles/articles (not products)
+const LISTICLE_PATTERNS = [
+  /^(the\s+)?\d+\s+(best|top|great)/i,
+  /best\s+[\w\s]+\s+(for|in)\s+\d{4}/i,
+  /top\s+\d+\s/i,
+  /\d{4}\s+(guide|review|comparison|picks)/i,
+  /picks?\s+(for\s+)?\d{4}/i,
+  /platforms?\s+to\s+consider/i,
+  /:\s*my\s+(top\s+)?\d+/i,
+  /software\s+(for|in)\s+\d{4}/i,
+  /alternatives?\s+to\s/i,
+  /vs\.?\s+/i, // "X vs Y" comparisons
 ];
 
 interface TavilySearchResult {
@@ -90,6 +125,14 @@ function isExcludedDomain(url: string): boolean {
   }
 }
 
+function isBlogUrl(url: string): boolean {
+  return BLOG_URL_PATTERNS.some(pattern => pattern.test(url));
+}
+
+function isListicleTitle(title: string): boolean {
+  return LISTICLE_PATTERNS.some(pattern => pattern.test(title));
+}
+
 function isPriorityDomain(url: string): boolean {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
@@ -99,16 +142,59 @@ function isPriorityDomain(url: string): boolean {
   }
 }
 
-function extractProductName(title: string): string {
-  // Remove common suffixes like "| AI Tool", "- AI Platform", etc.
+function extractProductName(title: string, url: string): string | null {
+  // CRITICAL: Reject listicle titles immediately
+  if (isListicleTitle(title)) {
+    console.log(`[Tavily] Rejected listicle title: "${title}"`);
+    return null;
+  }
+  
+  // Try to extract product name from title patterns
+  // Pattern: "ProductName | Something" or "ProductName - Something"
+  const pipeMatch = title.match(/^([^|\-\u2013\u2014]+)[\|\-\u2013\u2014]/);
+  if (pipeMatch) {
+    const candidate = pipeMatch[1].trim();
+    // Don't accept generic prefixes
+    if (!/^(plans?|pricing|home|about|blog|the|top|best|\d+)/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  
+  // Pattern: "Something | ProductName" (product name at end)
+  const reversePipeMatch = title.match(/[\|\-\u2013\u2014]\s*([^|\-\u2013\u2014]+)$/);
+  if (reversePipeMatch) {
+    const candidate = reversePipeMatch[1].trim();
+    // Don't accept generic suffixes
+    if (!/^(ai|tool|platform|software|pricing|official|home|blog)/i.test(candidate)) {
+      return candidate;
+    }
+  }
+  
+  // Try to extract from URL hostname
+  try {
+    const hostname = new URL(url).hostname;
+    const parts = hostname.replace(/^www\./, '').split('.');
+    if (parts.length >= 2) {
+      const name = parts[0];
+      // Capitalize first letter
+      if (name.length >= 2 && name.length <= 20) {
+        return name.charAt(0).toUpperCase() + name.slice(1);
+      }
+    }
+  } catch {
+    // URL parsing failed
+  }
+  
+  // Clean the title as fallback
   const cleaned = title
     .replace(/\s*[\|\-\u2013\u2014]\s*(AI|Tool|Platform|Software|App|SaaS|Pricing|Review|Home).*$/i, "")
     .replace(/\s*(Official Site|Homepage|Website).*$/i, "")
+    .replace(/^(Plans?\s*&?\s*)?Pricing\s*[\|\-]?\s*/i, "") // Remove "Pricing |" prefix
     .trim();
   
-  // If the result is too short, use the first part of the title
-  if (cleaned.length < 3) {
-    return title.split(/[\|\-\u2013\u2014]/)[0].trim();
+  // Reject if still looks like a listicle or generic
+  if (cleaned.length < 2 || cleaned.length > 60 || isListicleTitle(cleaned)) {
+    return null;
   }
   
   return cleaned;
@@ -155,6 +241,13 @@ async function searchTavily(query: string, category: string): Promise<ScrapedPro
     for (const result of data.results) {
       // Skip excluded domains (double-check)
       if (isExcludedDomain(result.url)) {
+        console.log(`[Tavily] Skipped excluded domain: ${result.url}`);
+        continue;
+      }
+
+      // Skip blog/article URLs
+      if (isBlogUrl(result.url)) {
+        console.log(`[Tavily] Skipped blog URL: ${result.url}`);
         continue;
       }
 
@@ -163,11 +256,25 @@ async function searchTavily(query: string, category: string): Promise<ScrapedPro
         continue;
       }
 
-      const name = extractProductName(result.title);
+      // Extract product name - this may return null for listicles
+      const name = extractProductName(result.title, result.url);
+      if (!name) {
+        console.log(`[Tavily] Could not extract valid product name from: "${result.title}"`);
+        continue;
+      }
+
       const tagline = extractTagline(result.content);
 
-      // Skip if we can't extract a meaningful name
+      // Skip if name is still invalid
       if (name.length < 2 || name.length > 50) {
+        continue;
+      }
+
+      // Additional validation: check content doesn't indicate a listicle
+      const contentLower = result.content.toLowerCase();
+      if (contentLower.includes("top 10") || contentLower.includes("best tools") || 
+          contentLower.includes("ranked") || contentLower.includes("alternatives to")) {
+        console.log(`[Tavily] Skipped listicle content for: "${name}"`);
         continue;
       }
 

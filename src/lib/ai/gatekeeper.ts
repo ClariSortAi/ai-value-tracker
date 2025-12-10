@@ -98,9 +98,99 @@ Website: {website}
 
 BE EXTREMELY STRICT. When in doubt, REJECT. We prioritize marketing, sales, customer_service, and productivity tools. Developer tools need exceptional commercial signals to pass.`;
 
+// PRE-VALIDATION: Reject obvious non-products BEFORE wasting AI calls
+function preValidate(product: ScrapedProduct): ViabilityAssessment | null {
+  const name = product.name || "";
+  const url = product.website || "";
+  
+  // LISTICLE/ARTICLE DETECTION - These are NOT products
+  const listiclePatterns = [
+    /^(the\s+)?\d+\s+(best|top|great)/i,           // "10 Best AI Tools", "Top 5 CRMs"
+    /best\s+[\w\s]+\s+(for|in)\s+\d{4}/i,          // "Best AI CRM for 2025"
+    /top\s+\d+\s/i,                                 // "Top 10 AI Tools"
+    /\d{4}\s+(guide|review|comparison|picks)/i,    // "2025 Guide to AI"
+    /picks?\s+(for\s+)?\d{4}/i,                    // "My Top Picks for 2025"
+    /platforms?\s+to\s+consider/i,                 // "Platforms to Consider"
+    /:\s*my\s+(top\s+)?\d+/i,                      // ": My Top 7 Picks"
+    /software\s+(for|in)\s+\d{4}/i,               // "Software for 2025"
+  ];
+  
+  for (const pattern of listiclePatterns) {
+    if (pattern.test(name)) {
+      return {
+        isCommercialSaaS: false,
+        targetAudience: "unknown",
+        productType: "other",
+        businessCategory: "other",
+        confidence: 0.95,
+        rejectionReason: `Listicle/article title detected: "${name.substring(0, 50)}"`,
+      };
+    }
+  }
+  
+  // BLOG/ARTICLE URL DETECTION
+  const blogUrlPatterns = [
+    /\/blog\//i,
+    /\/article\//i,
+    /\/learn\//i,
+    /\/resources?\//i,
+    /\/guide\//i,
+    /\/comparison\//i,
+    /\/best-/i,
+    /\/top-\d+/i,
+  ];
+  
+  for (const pattern of blogUrlPatterns) {
+    if (pattern.test(url)) {
+      return {
+        isCommercialSaaS: false,
+        targetAudience: "unknown",
+        productType: "other",
+        businessCategory: "other",
+        confidence: 0.9,
+        rejectionReason: `Blog/article URL detected: ${url.substring(0, 60)}`,
+      };
+    }
+  }
+  
+  // PRICING PAGE DETECTION - Not a product, just a pricing page
+  if (/^(plans?\s*&?\s*)?pricing/i.test(name) || name.toLowerCase() === "pricing") {
+    return {
+      isCommercialSaaS: false,
+      targetAudience: "unknown",
+      productType: "other",
+      businessCategory: "other",
+      confidence: 0.85,
+      rejectionReason: `Pricing page, not a product: "${name}"`,
+    };
+  }
+  
+  // GENERIC/MEANINGLESS NAMES
+  if (/^(AI\s+(for|in)\s+\w+)$/i.test(name)) {
+    return {
+      isCommercialSaaS: false,
+      targetAudience: "unknown",
+      productType: "other",
+      businessCategory: "other",
+      confidence: 0.8,
+      rejectionReason: `Generic/meaningless name: "${name}"`,
+    };
+  }
+  
+  // Passed pre-validation
+  return null;
+}
+
 export async function assessCommercialViability(
   product: ScrapedProduct
 ): Promise<ViabilityAssessment> {
+  // PRE-VALIDATION: Catch obvious non-products immediately
+  const preValidationResult = preValidate(product);
+  if (preValidationResult) {
+    console.log(`[Gatekeeper] Pre-validation rejected: ${product.name} - ${preValidationResult.rejectionReason}`);
+    return preValidationResult;
+  }
+
   // If no API key, use rule-based fallback
   if (!process.env.GEMINI_API_KEY) {
     console.log("[Gatekeeper] No Gemini API key, using rule-based assessment");
