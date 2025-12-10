@@ -15,10 +15,10 @@
   --background-secondary: #f1f5f9;
   --background-tertiary: #e2e8f0;
   
-  /* Foreground */
+  /* Foreground - WCAG AA compliant contrast ratios */
   --foreground: #0f172a;
   --foreground-muted: #475569;
-  --foreground-subtle: #94a3b8;
+  --foreground-subtle: #64748b; /* Improved from #94a3b8 for better contrast */
   
   /* Accent */
   --accent: var(--brand-primary);
@@ -182,7 +182,7 @@ a {
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--card-shadow);
-  transition: 
+  transition:
     transform var(--transition-base),
     box-shadow var(--transition-base),
     border-color var(--transition-base);
@@ -193,9 +193,15 @@ a {
 }
 
 .card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
   border-color: var(--card-border-hover);
+}
+
+.card-interactive:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-light), var(--card-shadow-hover);
+  border-color: var(--accent);
 }
 
 /* Card with accent border */
@@ -530,17 +536,53 @@ input::placeholder {
   transition: max-height var(--transition-base);
 }
 
-/* Trust indicators */
+/* Trust indicators - improved contrast */
 .trust-badge {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-full);
   font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(4px);
+}
+
+/* Section header system */
+.section-header {
+  margin-bottom: var(--space-8);
+}
+
+.section-header__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--brand-primary-dark);
+  background: var(--accent-light);
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-3);
+}
+
+.section-header__title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+  margin-bottom: var(--space-2);
+}
+
+.section-header__description {
+  font-size: 15px;
+  color: var(--foreground-muted);
+  max-width: 600px;
 }
 
 /* Skeleton shimmer animation */
@@ -588,17 +630,91 @@ input::placeholder {
   box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--accent);
 }
 
+/* Breadcrumb navigation */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+  color: var(--foreground-muted);
+  margin-bottom: var(--space-6);
+}
+
+.breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+  transition: color var(--transition-fast);
+}
+
+.breadcrumb__item:hover {
+  color: var(--foreground);
+}
+
+.breadcrumb__separator {
+  color: var(--foreground-subtle);
+}
+
+.breadcrumb__current {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+/* Scroll container with fade indicators */
+.scroll-container {
+  position: relative;
+}
+
+.scroll-container::before,
+.scroll-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.scroll-container::before {
+  left: 0;
+  background: linear-gradient(to right, var(--background) 0%, transparent 100%);
+}
+
+.scroll-container::after {
+  right: 0;
+  background: linear-gradient(to left, var(--background) 0%, transparent 100%);
+}
+
+.scroll-container.show-left::before,
+.scroll-container.show-right::after {
+  opacity: 1;
+}
+
 /* Responsive utilities */
 @media (max-width: 768px) {
   h1 {
     font-size: 28px;
   }
-  
+
   h2 {
     font-size: 22px;
   }
-  
+
   .section {
     padding: var(--space-8) 0;
+  }
+
+  /* Improved touch targets */
+  .btn, button {
+    min-height: 44px;
+  }
+
+  .tag {
+    min-height: 32px;
+    padding: var(--space-2) var(--space-3);
   }
 }

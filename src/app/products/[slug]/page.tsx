@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ScoreBadgeCompact } from "@/components/score-badge";
+import { getScoreLabel } from "@/lib/utils";
 
 interface Score {
   compositeScore: number;
@@ -137,12 +140,25 @@ export default function ProductDetailPage() {
 
   if (!product) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-lg text-[var(--foreground-muted)]">Product not found</p>
-        <Link href="/" className="text-[var(--accent)] hover:underline flex items-center gap-2">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Discover
-        </Link>
+      <div className="min-h-screen bg-[var(--background)]">
+        <div className="container-wide py-10">
+          <Breadcrumb
+            items={[
+              { label: "Discover", href: "/" },
+              { label: "Not Found" },
+            ]}
+            className="mb-8"
+          />
+          <div className="text-center py-20 card">
+            <p className="text-lg text-[var(--foreground-muted)] mb-4">Product not found</p>
+            <Link
+              href="/"
+              className="btn btn-primary inline-flex"
+            >
+              Browse All Tools
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -171,14 +187,14 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen bg-[var(--background)]">
       <div className="container-wide py-10">
-        {/* Back link */}
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-sm text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors mb-10"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Discover
-        </Link>
+        {/* Breadcrumb navigation */}
+        <Breadcrumb
+          items={[
+            { label: "Discover", href: "/" },
+            { label: product.name },
+          ]}
+          className="mb-8"
+        />
 
         {/* Product Header */}
         <header className="mb-12">
@@ -229,18 +245,26 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
-                {/* Score badge */}
+                {/* Score badge with accessibility */}
                 {score && (
-                  <div className="flex-shrink-0">
-                    <div className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center ${getCompositeScoreClass(score.compositeScore)}`}
+                  <div
+                    className="flex-shrink-0"
+                    role="img"
+                    aria-label={`AI Score: ${score.compositeScore} - ${getScoreLabel(score.compositeScore)}`}
+                  >
+                    <div
+                      className={`w-20 h-20 rounded-2xl flex flex-col items-center justify-center ${getCompositeScoreClass(score.compositeScore)}`}
                       style={{ background: `var(--${getCompositeScoreClass(score.compositeScore).replace('score-', 'score-')}-bg)` }}
                     >
-                      <span className="text-3xl font-bold" style={{ color: `var(--${getCompositeScoreClass(score.compositeScore).replace('score-', 'score-')})` }}>
+                      <span
+                        className="text-3xl font-bold"
+                        style={{ color: `var(--${getCompositeScoreClass(score.compositeScore).replace('score-', 'score-')})` }}
+                      >
                         {score.compositeScore}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--foreground-subtle)] mt-2 text-center">
-                      AI Score
+                      {getScoreLabel(score.compositeScore)}
                     </p>
                   </div>
                 )}
@@ -360,9 +384,7 @@ export default function ProductDetailPage() {
                 {score && (
                   <div className="flex items-center justify-between">
                     <span className="text-[var(--foreground-subtle)]">AI Score</span>
-                    <span className={`score-badge ${getCompositeScoreClass(score.compositeScore)}`}>
-                      {score.compositeScore}
-                    </span>
+                    <ScoreBadgeCompact score={score.compositeScore} />
                   </div>
                 )}
                 {product.source && (

@@ -36,11 +36,10 @@ export function DiscoverySearch() {
   const [results, setResults] = useState<DiscoveryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const canSearch = query.trim().length >= 3;
+
   const handleSearch = useCallback(async () => {
-    if (!query.trim() || query.length < 3) {
-      setError("Please enter at least 3 characters");
-      return;
-    }
+    if (!canSearch) return;
 
     setIsSearching(true);
     setError(null);
@@ -69,7 +68,7 @@ export function DiscoverySearch() {
     } finally {
       setIsSearching(false);
     }
-  }, [query, includeOpenSource]);
+  }, [query, includeOpenSource, canSearch]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isSearching) {
@@ -122,14 +121,24 @@ export function DiscoverySearch() {
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setError(null);
+            }}
             onKeyDown={handleKeyDown}
             placeholder="I want a tool that takes meeting notes with AI..."
             className="w-full px-6 py-4 pl-14 text-lg rounded-2xl border-2 border-transparent bg-white/95 text-[var(--foreground)] placeholder-[var(--foreground-subtle)] focus:border-[var(--brand-primary)] focus:ring-4 focus:ring-[var(--brand-primary-light)]/20 transition-all shadow-xl"
             disabled={isSearching}
+            aria-label="Describe what kind of AI tool you need"
           />
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--foreground-subtle)]" />
         </div>
+        {/* Character hint - only show when typing but not enough characters */}
+        {query.length > 0 && query.length < 3 && (
+          <p className="mt-2 text-sm text-white/60 text-center">
+            Type {3 - query.length} more character{3 - query.length !== 1 ? "s" : ""} to search
+          </p>
+        )}
       </div>
 
       {/* Options Row */}
@@ -152,18 +161,19 @@ export function DiscoverySearch() {
 
         <button
           onClick={handleSearch}
-          disabled={isSearching || query.length < 3}
-          className="px-6 py-3 bg-[var(--brand-primary)] text-white font-medium rounded-xl hover:bg-[var(--brand-primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+          disabled={isSearching || !canSearch}
+          className="px-6 py-3 bg-[var(--brand-primary)] text-white font-medium rounded-xl hover:bg-[var(--brand-primary-dark)] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 min-h-[48px]"
+          aria-busy={isSearching}
         >
           {isSearching ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              Searching...
+              <span>Searching the web...</span>
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5" />
-              Find Tools
+              <span>Find Tools</span>
             </>
           )}
         </button>
