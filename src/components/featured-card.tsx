@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, TrendingUp, Award } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Award, Star } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ScoreBadgeCompact } from "@/components/score-badge";
