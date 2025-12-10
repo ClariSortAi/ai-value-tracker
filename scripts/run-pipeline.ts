@@ -3,7 +3,7 @@ import { scrapeAll, saveScrapedProducts, saveOpenSourceTools } from '../src/lib/
 import { scrapeTavilyDiscovery } from '../src/lib/scrapers/tavily-discovery';
 import { scrapeFutureTools } from '../src/lib/scrapers/futuretools';
 import { assessCommercialViability } from '../src/lib/ai/gatekeeper';
-import type { ScrapedOpenSourceTool, ScrapedProduct } from '../src/lib/scrapers/types';
+import type { ScrapedOpenSourceTool, ScrapedProduct, Source } from '../src/lib/scrapers/types';
 
 const prisma = new PrismaClient();
 
@@ -109,7 +109,7 @@ async function runPipeline() {
           category: product.category || undefined,
           tags: JSON.parse(product.tags || '[]'),
           launchDate: product.launchDate || undefined,
-          source: product.source,
+          source: product.source as Source,
           sourceUrl: product.sourceUrl || undefined,
           sourceId: product.sourceId || undefined,
         });
@@ -137,9 +137,6 @@ async function runPipeline() {
               targetAudience: viability.targetAudience,
               productType: viability.productType,
               businessCategory: viability.businessCategory,
-              hasPricingPage: viability.hasPricingPage,
-              hasTeamPage: viability.hasTeamPage,
-              hasTermsOfService: viability.hasTermsOfService,
             }
           });
           console.log(`    ✅ ${viability.businessCategory} | ${viability.targetAudience} | Score: ${viability.confidence}`);
