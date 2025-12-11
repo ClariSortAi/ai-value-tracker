@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, Star, TrendingUp, Clock } from "lucide-react";
+import { ArrowUpRight, Clock } from "lucide-react";
 import { useState } from "react";
+import { ScoreBadgeCompact } from "@/components/score-badge";
 
 interface ToolCardProps {
   product: {
@@ -17,6 +18,8 @@ interface ToolCardProps {
     tags?: string[];
     targetRoles?: string[];
     source?: string | null;
+    vendor?: { name?: string | null } | null;
+    isChannelRelevant?: boolean | null;
     launchDate: string | Date;
     upvotes?: number;
     stars?: number;
@@ -45,13 +48,6 @@ function getAvatarGradient(name: string): string {
   }
   
   return gradients[Math.abs(hash) % gradients.length];
-}
-
-// Get score tier class
-function getScoreClass(score: number): string {
-  if (score >= 70) return "score-high";
-  if (score >= 50) return "score-mid";
-  return "score-low";
 }
 
 function formatRelativeDate(date: string | Date): string {
@@ -150,11 +146,9 @@ export function ToolCard({ product }: ToolCardProps) {
               )}
             </div>
             
-            {/* Score Badge */}
+            {/* Score Badge with accessibility */}
             {score !== null && (
-              <div className={`score-badge ${getScoreClass(score)} flex-shrink-0`}>
-                {score}
-              </div>
+              <ScoreBadgeCompact score={score} className="flex-shrink-0" />
             )}
           </div>
           
@@ -163,6 +157,16 @@ export function ToolCard({ product }: ToolCardProps) {
             {product.category && (
               <span className="tag tag-accent text-xs">
                 {product.category}
+              </span>
+            )}
+            {product.isChannelRelevant && (
+              <span className="tag text-xs bg-[var(--accent-muted)] text-[var(--accent-foreground)]">
+                Channel ready
+              </span>
+            )}
+            {product.vendor?.name && (
+              <span className="tag text-xs">
+                {product.vendor.name}
               </span>
             )}
             {product.targetRoles?.slice(0, 1).map((role) => (
@@ -178,30 +182,22 @@ export function ToolCard({ product }: ToolCardProps) {
           </div>
         </div>
         
-        {/* Footer */}
+        {/* Footer - simplified for cleaner look */}
         <div className="px-5 py-3 bg-[var(--background-secondary)] border-t border-[var(--card-border)] flex items-center justify-between">
           <div className="flex items-center gap-3 text-xs text-[var(--foreground-subtle)]">
-            {product.source && (
-              <span className="flex items-center gap-1">
-                <Star className="w-3 h-3" />
-                {getSourceLabel(product.source)}
-              </span>
-            )}
             <span className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {formatRelativeDate(product.launchDate)}
             </span>
-            {(product.upvotes && product.upvotes > 0) && (
-              <span className="flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" />
-                {product.upvotes}
-              </span>
+            {product.category && (
+              <span className="hidden sm:inline">{product.category}</span>
             )}
           </div>
-          
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--accent)] opacity-0 group-hover:opacity-100 transition-opacity">
+
+          {/* View link - always visible with enhanced hover */}
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--foreground-muted)] group-hover:text-[var(--accent)] transition-colors">
             View
-            <ArrowUpRight className="w-3 h-3" />
+            <ArrowUpRight className="w-3 h-3 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </span>
         </div>
       </article>

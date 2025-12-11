@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Sparkles, BarChart3, Info, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: "/", label: "Discover" },
-  { href: "/compare", label: "Compare" },
-  { href: "/about", label: "About" },
+  { href: "/", label: "Discover", icon: Search },
+  { href: "/compare", label: "Compare", icon: BarChart3 },
+  { href: "/about", label: "About", icon: Info },
 ];
 
 export function Navbar() {
@@ -19,38 +19,50 @@ export function Navbar() {
       <nav className="container-wide">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link 
-            href="/" 
-            className="flex items-center gap-2 text-[var(--foreground)] font-semibold text-lg tracking-tight group"
+          <Link
+            href="/"
+            className="flex items-center gap-2.5 text-[var(--foreground)] font-semibold text-lg tracking-tight group"
           >
-            <div className="w-8 h-8 rounded-lg bg-[var(--accent)] flex items-center justify-center transition-transform group-hover:scale-105">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--brand-primary)] to-[var(--brand-primary-dark)] flex items-center justify-center shadow-sm transition-all group-hover:shadow-md group-hover:scale-105">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span>AIValue</span>
+            <div className="flex flex-col">
+              <span className="leading-tight">AIValue</span>
+              <span className="text-[10px] font-normal text-[var(--foreground-subtle)] leading-none hidden sm:block">
+                Discover AI Tools
+              </span>
+            </div>
           </Link>
 
           {/* Navigation */}
           <div className="flex items-center gap-1">
             {navLinks.map((link) => {
-              const isActive = 
-                link.href === "/" 
+              const Icon = link.icon;
+              const isActive =
+                link.href === "/"
                   ? pathname === "/" || pathname.startsWith("/products")
-                  : pathname === link.href;
-              
+                  : pathname === link.href || pathname.startsWith(link.href);
+
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "px-4 py-2 text-sm font-medium rounded-lg transition-all relative",
+                    "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all relative",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2",
                     isActive
-                      ? "text-[var(--foreground)] bg-[var(--background-secondary)]"
+                      ? "text-[var(--accent)] bg-[var(--accent-light)]"
                       : "text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--background-secondary)]"
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
-                  {link.label}
+                  <Icon className="w-4 h-4" />
+                  <span>{link.label}</span>
                   {isActive && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--accent)]" />
+                    <span
+                      className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-[var(--accent)]"
+                      aria-hidden="true"
+                    />
                   )}
                 </Link>
               );

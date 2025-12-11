@@ -18,6 +18,11 @@ export interface ScrapedProduct {
   logo?: string;
   category?: string;
   tags: string[];
+  vendorName?: string;
+  vendorType?: string;
+  integrationHints?: string[];
+  channelUseCases?: string[];
+  channelSignals?: string[];
   launchDate: Date;
   source: Source;
   sourceUrl?: string;

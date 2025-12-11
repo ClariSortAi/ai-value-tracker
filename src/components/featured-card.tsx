@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowUpRight, Star, TrendingUp, Award } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Award, Star } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { ScoreBadgeCompact } from "@/components/score-badge";
 
 interface FeaturedCardProps {
   product: {
@@ -47,12 +48,6 @@ function getAvatarGradient(name: string): string {
   }
   
   return gradients[Math.abs(hash) % gradients.length];
-}
-
-function getScoreClass(score: number): string {
-  if (score >= 70) return "score-high";
-  if (score >= 50) return "score-mid";
-  return "score-low";
 }
 
 export function FeaturedCard({ product, rank }: FeaturedCardProps) {
@@ -111,9 +106,7 @@ export function FeaturedCard({ product, rank }: FeaturedCardProps) {
               {product.name}
             </h3>
             {score !== null && (
-              <div className={`score-badge ${getScoreClass(score)} flex-shrink-0`}>
-                {score}
-              </div>
+              <ScoreBadgeCompact score={score} className="flex-shrink-0" />
             )}
           </div>
           

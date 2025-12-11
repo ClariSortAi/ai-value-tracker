@@ -7,9 +7,9 @@ import { DiscoverySearch } from "@/components/discovery-search";
 import { RoleTabs } from "@/components/role-tabs";
 import { ToolCard, ToolCardSkeleton } from "@/components/tool-card";
 import { OpenSourceCard } from "@/components/open-source-card";
-import { AdminControls } from "@/components/admin-controls";
 import { FadeIn } from "@/components/ui/fade-in";
 import { FeaturedCard } from "@/components/featured-card";
+import { SectionHeader } from "@/components/ui/section-header";
 
 interface Product {
   id: string;
@@ -171,32 +171,18 @@ export default function DiscoverPage() {
         </div>
       </section>
 
-      {/* Admin Controls - Collapsible */}
-      <section className="py-4 border-b border-[var(--card-border)]">
-        <div className="container-wide">
-          <AdminControls />
-        </div>
-      </section>
-
       {/* Rising Stars Featured Section */}
       {!loadingFeatured && featuredProducts.length > 0 && (
         <section className="section border-b border-[var(--card-border)]">
           <div className="container-wide">
             <FadeIn>
-              <div className="flex items-center justify-between gap-4 mb-6">
-                <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--brand-accent)]/10 text-[var(--brand-accent-dark)] text-xs font-medium mb-2">
-                    <TrendingUp className="w-3 h-3" />
-                    Top Rated
-                  </div>
-                  <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                    Rising Stars
-                  </h2>
-                  <p className="text-sm text-[var(--foreground-muted)] mt-1">
-                    The highest-scored AI tools making waves right now.
-                  </p>
-                </div>
-              </div>
+              <SectionHeader
+                label="Top Rated"
+                labelIcon={TrendingUp}
+                title="Rising Stars"
+                description="The highest-scored AI tools making waves right now."
+                variant="accent"
+              />
             </FadeIn>
 
             <motion.div
@@ -344,19 +330,11 @@ export default function DiscoverPage() {
       <section className="section bg-[var(--background-secondary)]">
         <div className="container-wide">
           <FadeIn>
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <p className="text-xs font-medium text-[var(--accent)] uppercase tracking-wider mb-1">
-                  Hugging Face Spaces
-                </p>
-                <h2 className="text-xl font-semibold text-[var(--foreground)]">
-                  Open Source Spotlight
-                </h2>
-                <p className="text-sm text-[var(--foreground-muted)] mt-1">
-                  Quality open-source AI tools, ranked with the same scoring system.
-                </p>
-              </div>
-            </div>
+            <SectionHeader
+              label="Hugging Face Spaces"
+              title="Open Source Spotlight"
+              description="Quality open-source AI tools, ranked with the same scoring system."
+            />
           </FadeIn>
 
           {loadingOpenSource ? (
